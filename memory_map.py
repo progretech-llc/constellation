@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
-MEMORY_CLI = "/home/edwin/Rend/bin/mempalace"
+MEMORY_CLI = "/home/edwin/ptinternal/bin/mempalace"
 MEMORY_AGENT = "codex"
 LIST_LIMIT = 2000
 SEARCH_LIMIT = 700
