@@ -1,0 +1,46 @@
+[
+  {
+    "at": "09:42:10",
+    "actor": "Mak",
+    "action": "created",
+    "item": "cluster-renderer.py",
+    "source": "Factory repo",
+    "destination": "PT_CONTEXT · job artifacts",
+    "source_resource": "Git · ProgreTech org",
+    "destination_resource": "PT_CONTEXT",
+    "note": "Synthetic demonstration event"
+  },
+  {
+    "at": "09:42:24",
+    "actor": "Imagen",
+    "action": "generated",
+    "item": "observatory-concept.png",
+    "source": "Imagen workspace",
+    "destination": "PT_CONTEXT · job artifacts",
+    "source_resource": "Local home",
+    "destination_resource": "PT_CONTEXT",
+    "note": "Synthetic demonstration event"
+  },
+  {
+    "at": "09:42:41",
+    "actor": "Rend",
+    "action": "copied",
+    "item": "review-notes.md",
+    "source": "Factory repo",
+    "destination": "Rend · task records",
+    "source_resource": "Git · ProgreTech org",
+    "destination_resource": "Rend workspace",
+    "note": "Synthetic demonstration event"
+  },
+  {
+    "at": "09:43:03",
+    "actor": "Lyra",
+    "action": "updated",
+    "item": "acceptance-criteria.md",
+    "source": "Factory repo",
+    "destination": "PT_CONTEXT · job artifacts",
+    "source_resource": "Git · ProgreTech org",
+    "destination_resource": "PT_CONTEXT",
+    "note": "Synthetic demonstration event"
+  }
+]
