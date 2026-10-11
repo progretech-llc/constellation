@@ -263,6 +263,22 @@ def build_catalog(activities: list[Activity]) -> tuple[list[FileReference], list
             count += 1
             if count >= MIN_FILES_PER_AGENT:
                 break
+    # A quiet configured directory should not disappear beneath the global cap.
+    for root, _ in ROOTS:
+        if len(selected) >= MAX_FILES or any(item.root == root for item in selected):
+            continue
+        count = 0
+        for item in newest:
+            if item.root != root or item.path in selected_paths:
+                continue
+            if item.directory not in kept_directories and len(kept_directories) >= MAX_DIRECTORIES:
+                continue
+            selected.append(item)
+            selected_paths.add(item.path)
+            kept_directories.add(item.directory)
+            count += 1
+            if count >= 3 or len(selected) >= MAX_FILES:
+                break
     for item in newest:
         if len(selected) >= MAX_FILES:
             break

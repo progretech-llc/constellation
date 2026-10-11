@@ -84,7 +84,7 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null) 
             continue;
         }
         // Integer multiples keep orbits continuous when the scene phase wraps at 2π.
-        const speed = node.kind === 'Remembered file' ? 3 :
+        const speed = ['Remembered file', 'Memory planet'].includes(node.kind) ? 3 :
             node.kind === 'Directory system' ? 0 : 1;
         const angle = phase * speed;
         const dx = node.x - parent.x, dy = node.y - parent.y;
@@ -115,10 +115,16 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null) 
     const anchorNode = focus ? nodes.find(node => node.kind === focus.kind &&
         node.root === focus.root && node.path === focus.path) : null;
     const anchor = positions.get(anchorNode?.id) ?? anchorNode;
-    const zoom = focus ? (focus.kind === 'Directory system' ? 1.9 : 2.6) : 1;
+    const zoom = focus ? (focus.kind === 'Directory system' ? 2.1 : 2.6) : 1;
     const base = project(0, 0, 0, phase, width, height, skyMode);
     const coordinates = nodes.map(node => {
-        const position = positions.get(node.id) ?? node;
+        let position = positions.get(node.id) ?? node;
+        if (node.kind === 'Memory planet' && !focus) {
+            const parent = positions.get(node.orbit_parent);
+            if (parent) position = {x: parent.x + (position.x - parent.x) * 0.48,
+                                    y: parent.y + (position.y - parent.y) * 0.48,
+                                    z: parent.z + (position.z - parent.z) * 0.48};
+        }
         const point = project(position.x - (anchor?.x ?? 0), position.y - (anchor?.y ?? 0),
             position.z - (anchor?.z ?? 0), phase, width, height, skyMode);
         return [base[0] + (point[0] - base[0]) * zoom,
@@ -132,9 +138,9 @@ export function hitTest(scene, coordinates, visible, x, y) {
     for (let i = 0; i < scene.nodes.length; i++) {
         if (!visible.has(i)) continue;
         const node = scene.nodes[i];
-        if (!['Host', 'Directory system', 'Remembered directory', 'Remembered file'].includes(node.kind) || !node.path) continue;
+        if (!['Host', 'Directory system', 'Remembered directory', 'Remembered file', 'Memory planet'].includes(node.kind) || !node.path) continue;
         const [px, py] = coordinates[i];
-        const radius = node.kind === 'Host' ? 30 : node.kind === 'Directory system' ? 27 : node.kind === 'Remembered directory' ? 16 : 11;
+        const radius = node.kind === 'Host' ? 30 : node.kind === 'Directory system' ? 27 : node.kind === 'Remembered directory' ? 16 : node.kind === 'Memory planet' ? 15 : 11;
         const distance = Math.hypot(x - px, y - py) / radius;
         if (distance <= 1 && (!best || distance < best.distance)) best = {node, distance};
     }
@@ -222,6 +228,51 @@ function label(cr, x, y, text, hex, size = 11) {
     cr.showText(text);
 }
 
+function memoryIndex(cr, width, height, scene, focus) {
+    if (focus?.kind !== 'Directory system') return;
+    const planets = scene.nodes.filter(node => node.kind === 'Memory planet' && node.root === focus.root);
+    if (!planets.length) return;
+    const panelWidth = Math.min(415, Math.max(290, width * 0.27));
+    const x = Math.max(12, width - panelWidth - (width >= 1600 ? 145 : 20));
+    const top = 61, rowHeight = 18;
+    const shown = Math.min(planets.length, Math.max(5, Math.floor((height * 0.44 - 60) / rowHeight)));
+    const panelHeight = 55 + shown * rowHeight + (shown < planets.length ? 22 : 8);
+    cr.save();
+    cr.setSourceRGBA(0.025, 0.045, 0.077, 0.83);
+    cr.rectangle(x, top, panelWidth, panelHeight);
+    cr.fill();
+    source(cr, '#506d94', 0.58);
+    cr.setLineWidth(0.8);
+    cr.rectangle(x + 0.5, top + 0.5, panelWidth - 1, panelHeight - 1);
+    cr.stroke();
+    cr.selectFontFace('Sans', Cairo.FontSlant.NORMAL, Cairo.FontWeight.BOLD);
+    cr.setFontSize(11);
+    source(cr, '#d9eaff', 0.95);
+    cr.moveTo(x + 15, top + 22);
+    cr.showText('RECENT MEMPALACE MEMORIES');
+    cr.selectFontFace('Sans', Cairo.FontSlant.NORMAL, Cairo.FontWeight.NORMAL);
+    cr.setFontSize(8.5);
+    source(cr, '#9eb8d7', 0.87);
+    cr.moveTo(x + 15, top + 38);
+    cr.showText('Click a numbered planet · hover for its full title');
+    for (let index = 0; index < shown; index++) {
+        const node = planets[index], y = top + 58 + index * rowHeight;
+        circle(cr, x + 19, y - 3, 3.1, node.color, 0.96);
+        cr.setFontSize(10);
+        source(cr, '#dce8f8', 0.92);
+        cr.moveTo(x + 32, y);
+        const title = node.name.length > 51 ? `${node.name.slice(0, 50)}…` : node.name;
+        cr.showText(`${node.memory_rank}. ${title}`);
+    }
+    if (shown < planets.length) {
+        source(cr, '#9eb8d7', 0.85);
+        cr.setFontSize(8.5);
+        cr.moveTo(x + 16, top + panelHeight - 10);
+        cr.showText(`+ ${planets.length - shown} more · hover their planets to read titles`);
+    }
+    cr.restore();
+}
+
 function paintForeground(cr, width, height, image) {
     if (!image) return;
     const imageWidth = image.getWidth(), imageHeight = image.getHeight();
@@ -238,13 +289,16 @@ function attribution(cr, width, height, scene) {
     const title = 'CONSTELLATION BY PROGRETECH';
     const notice = '© 2026 PROGRETECH LLC';
     const stale = scene && (!Number.isFinite(scene.generated_at) || Date.now() / 1000 - scene.generated_at > 360);
-    const count = `${scene?.counts?.files ?? 0} REMEMBERED FILES${stale ? '  ·  MEMORY STALE' : ''}`;
+    const planets = scene?.counts?.memory_planets ? `  ·  ${scene.counts.memory_planets} MEMORY PLANETS` : '';
+    const count = `${scene?.counts?.files ?? 0} REMEMBERED FILES${planets}${stale ? '  ·  MEMORY STALE' : ''}`;
     const shortcuts = [
         'CLICK FOLDER · OPEN     ALT+CLICK · FOCUS/RESET',
         'CTRL+HOVER FILE · TARGET     CTRL+CLICK · OPEN',
     ];
     if (scene?.memory_source?.provider === 'mempalace')
         shortcuts.push('CTRL+SHIFT+CLICK FILE · NEWEST MEMORY');
+    if (scene?.counts?.memory_planets)
+        shortcuts.push('CLICK MEMORY PLANET · REVIEW AUTHOR');
     const rows = [
         ...shortcuts.map(text => ({text, size: 8.5, bold: false, alpha: 0.82, gap: 0})),
         {text: count, size: 9, bold: false, alpha: 0.76, gap: 5},
@@ -344,12 +398,19 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
         } else if (node.kind === 'Remembered directory') {
             glow(cr, x, y, 14, node.color, 0.18 * intensity);
             circle(cr, x, y, 3.2, node.color, 0.74);
+        } else if (node.kind === 'Memory planet') {
+            glow(cr, x, y, focus ? 20 : 12, node.color, 0.38 * intensity);
+            circle(cr, x, y, focus ? 4.5 : 2.5, node.color, 0.96);
+            circle(cr, x, y, focus ? 1.5 : 0.9, '#ffffff', 0.8);
+            if (focus?.kind === 'Directory system' && focus.root === node.root && settings.labels !== false)
+                label(cr, x, y + 16, String(node.memory_rank || ''), '#dce9f7', 8.5);
         } else {
             const flicker = 0.73 + 0.20 * Math.sin(time * 1.4 + i * 7.13);
             circle(cr, x, y, 1.1 + Math.max(0, node.z + 1) * 0.30, node.color, flicker);
         }
     }
     if (skyMode) paintForeground(cr, width, height, foreground);
+    if (settings.labels !== false) memoryIndex(cr, width, height, scene, focus);
     if (focus) label(cr, Math.min(width * 0.47, 410), 44,
         `FOCUS: ${focus.name.toUpperCase()}  ·  ALT+CLICK AGAIN TO RESET`, '#c7dcf4', 10);
     attribution(cr, width, height, scene);

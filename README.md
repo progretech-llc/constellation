@@ -36,6 +36,10 @@ On an exposed part of the desktop, **click a solar system or remembered director
 
 **Alt-click a solar system or remembered directory** to focus and enlarge its remembered files, subfolders and connected agents. Alt-click the same node or an empty part of the sky to return to the full map. Folder and memory actions are available only where the desktop is visible; they do not intercept clicks through application windows.
 
+An optional **MemPalace solar system** shows the newest accessible active memory titles as orbiting planets. Alt-click its sun to focus; click a memory planet to open a temporary, read-only Constellation browser view of that record and other accessible records by the same author. Known agent authors use their agent colors; other authors use the system color. The viewer uses the configured identity-bound MemPalace CLI and does not modify records or copy their content into the wallpaper scene. It serves only on `127.0.0.1` with a temporary URL and closes after ten minutes idle. Private memories owned by other agents are not displayed.
+
+Set the number of planets independently of the file-star cap in the control app (**Recent MemPalace planets**) or with `python3 configure.py --memory-planets N`, where `N` is 1–100 and defaults to 20. The two-minute scene rebuild picks up new records and count changes; the GNOME extension reads the refreshed scene within two seconds. Focus shows numbered planets and a matching title index; hover reveals the full title. A large count can crowd the sky, so start with 20.
+
 On Ubuntu Wayland, Desktop Icons NG owns the desktop pointer surface. Constellation places a small Shell click target only under the currently hovered actionable star. Pause over a star until its path tooltip appears, then click or use the modifier shown there. The target follows the pointer on the wallpaper's 125 ms redraw cycle; ordinary desktop icons remain clickable away from stars. If Alt-clicking empty sky does not reset a focused view, Alt-click the host star instead. After installing an extension code update, the current Wayland Shell keeps its cached JavaScript until the next login; no logout is needed for scene-data refreshes.
 
 A small lower-right legend keeps these shortcuts, the remembered-file count, and the ProgreTech credit together on the wallpaper. The MemPalace shortcut appears only when MemPalace is the configured source.
@@ -71,7 +75,7 @@ Put one JSON object or an array of objects in each `*.json` file in that directo
 
 Replace `USER` with your actual login; the file must already exist inside a configured root. `created`, `modified`, and `accessed` are inferred from step wording; all other references show as referenced. The exporter should supply reviewed summaries, not secrets or full conversations. JSON files stay local and are never uploaded by Constellation.
 
-For MemPalace, point to its **CLI executable**, your identity and project; do not point Constellation at the database directory:
+For the MemPalace **memory source**, point to its CLI executable, your identity and project; do not use the database directory as the CLI path:
 
 ```bash
 python3 configure.py \
@@ -84,6 +88,15 @@ python3 configure.py \
 ```
 
 The CLI path above is an example only. Use the path on your workstation and the identity you are authorized to use. The reader accepts MemPalace's reviewed `structured-agent-activity` records in the selected project. Other authors' shared project records retain their attribution. Use `sources.json` to add `"include_subprojects": true` inside `memory` if intended. After editing sources or dropping new JSON summaries, refresh immediately with `systemctl --user start factory-observatory-scene.service`. The timer refreshes every two minutes. Check failures with `journalctl --user -u factory-observatory-scene.service -n 30`.
+
+To add the optional memory solar system, use the **directory containing** `mempalace.db` as its path. The database file must exist and be readable, while Constellation obtains visible records through the authorized CLI rather than opening it directly:
+
+```bash
+python3 configure.py --mempalace-system "MemPalace=/path/to/mempalace" --memory-planets 20
+systemctl --user start factory-observatory-scene.service
+```
+
+The equivalent `sources.json` root is `{"label":"MemPalace","path":"/path/to/mempalace","type":"mempalace","max_memories":20}`. This root requires `memory.provider` to be `mempalace`; configure the CLI to use the same database in that directory. Ordinary directory roots and JSON memory sources continue to work without it. The planet list follows the CLI's newest-active ordering across all records visible to the configured identity. The author browser is a bounded snapshot of up to 5,000 accessible recent records, not an unrestricted database browser.
 
 To keep a current roster while showing older memories, configure display-only author aliases. For example, `python3 configure.py --agents codex rend lyra mak progre imagen moxy --alias architect=rend --alias reviewer=rend --alias fast=rend --alias designer=rend --alias factory-worker=rend --unlisted-agent rend` groups those older authors, and any other unlisted authors, under Rend. Configured agent names remain visible when they have no current file links; all agents orbit the host star. These choices change scene nodes and links only; the source memory records and their original authors remain unchanged. Omit `--unlisted-agent` if you want unlisted authors to receive their own nodes. Older `center_agent` settings are accepted but no longer place an agent at the center.
 

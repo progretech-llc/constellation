@@ -193,6 +193,13 @@ export default class FactoryObservatoryWallpaper extends Extension {
             this._tooltip.hide();
             return;
         }
+        if (node.kind === 'Memory planet') {
+            this._tooltip.text = `${node.name}\n${node.memory_author || 'Unknown author'} · Click: review this memory and author`;
+            this._tooltip.set_position(Math.max(4, Math.min(x + 18, global.stage.width - 560)),
+                Math.max(4, Math.min(y + 18, global.stage.height - 65)));
+            this._tooltip.show();
+            return;
+        }
         const path = node.kind === 'Remembered file' ? GLib.path_get_dirname(node.path) : node.path;
         const displayedPath = path.length > 96 ? `…${path.slice(-95)}` : path;
         const memory = node.kind === 'Remembered file' && node.memory &&
@@ -225,7 +232,9 @@ export default class FactoryObservatoryWallpaper extends Extension {
             if (!node && this._focus && this._desktopPoint(x, y)) {
                 this._focus = null;
             } else if (node) {
-                const target = node.kind === 'Remembered file' ?
+                const target = node.kind === 'Memory planet' ?
+                    this._scene.nodes.find(item => item.kind === 'Directory system' && item.root === node.root) ?? node :
+                    node.kind === 'Remembered file' ?
                     this._scene.nodes.find(item => item.kind === 'Remembered directory' && item.path === GLib.path_get_dirname(node.path)) ?? node : node;
                 this._focus = this._focus?.path === target.path && this._focus?.root === target.root ?
                     null : {kind: target.kind, path: target.path, root: target.root, name: target.name};
@@ -235,7 +244,9 @@ export default class FactoryObservatoryWallpaper extends Extension {
             return Clutter.EVENT_STOP;
         }
         if (!node) return Clutter.EVENT_PROPAGATE;
-        if (node.kind === 'Remembered file') {
+        if (node.kind === 'Memory planet') {
+            this._openMemoryBrowser(node);
+        } else if (node.kind === 'Remembered file') {
             if (!ctrl) return Clutter.EVENT_PROPAGATE;
             if (shift && node.memory && this._scene.memory_source?.provider === 'mempalace')
                 this._openMemory(node);
@@ -264,6 +275,17 @@ export default class FactoryObservatoryWallpaper extends Extension {
                 source.cli, source.agent, node.memory_project, node.memory], Gio.SubprocessFlags.NONE);
         } catch (error) {
             Main.notify('Constellation', `Could not open memory: ${error.message}`);
+        }
+    }
+
+    _openMemoryBrowser(node) {
+        const source = this._scene.memory_source;
+        if (source?.provider !== 'mempalace' || !source.cli || !source.agent || !source.browser_script) return;
+        try {
+            Gio.Subprocess.new(['/usr/bin/python3', source.browser_script,
+                source.cli, source.agent, node.memory], Gio.SubprocessFlags.NONE);
+        } catch (error) {
+            Main.notify('Constellation', `Could not open memory review: ${error.message}`);
         }
     }
 }

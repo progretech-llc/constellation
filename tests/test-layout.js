@@ -59,4 +59,16 @@ if (distance(start.positions.get('agent:worker'), moved.positions.get('agent:wor
     throw new Error('Agent did not roam around the host');
 if (hitTest(hostScene, start.coordinates, start.visible, ...start.coordinates[0])?.kind !== 'Host')
     throw new Error('Central galaxy directory cannot be selected');
+const memoryScene = {
+    nodes: [
+        {id: 'host', kind: 'Host', path: '/galaxy', x: 0, y: 0, z: 0},
+        {id: 'root:MemPalace', orbit_parent: 'host', kind: 'Directory system', root: 'MemPalace', path: '/galaxy/mempalace', x: 4, y: 0, z: 0},
+        {id: 'memory:abcd1234', orbit_parent: 'root:MemPalace', kind: 'Memory planet', root: 'MemPalace', path: '/galaxy/mempalace', x: 5, y: 0, z: 0},
+    ], links: [],
+};
+const memoryFocus = {kind: 'Directory system', root: 'MemPalace', path: '/galaxy/mempalace'};
+const memoryLayout = layoutScene(memoryScene, 0, 1200, 800, true, memoryFocus);
+if (!memoryLayout.visible.has(2) ||
+    hitTest(memoryScene, memoryLayout.coordinates, memoryLayout.visible, ...memoryLayout.coordinates[2])?.kind !== 'Memory planet')
+    throw new Error('Focused memory planet was not visible and clickable');
 print('focus layout checks passed');

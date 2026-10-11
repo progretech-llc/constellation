@@ -19,6 +19,8 @@ def main() -> None:
     parser.add_argument('--agent', help='Your own MemPalace identity (with --mempalace-cli)')
     parser.add_argument('--project', help='MemPalace project (with --mempalace-cli)')
     parser.add_argument('--root', action='append', metavar='LABEL=PATH', help='Solar system directory; repeat to replace all roots')
+    parser.add_argument('--mempalace-system', metavar='LABEL=DIR', help='Add one optional MemPalace solar system (DIR contains mempalace.db)')
+    parser.add_argument('--memory-planets', type=int, metavar='N', help='Recent MemPalace planets to show, 1–100 (default 20)')
     parser.add_argument('--host-name', help='Central workstation star name (defaults to the system hostname)')
     parser.add_argument('--galaxy', metavar='LABEL=PATH', help='Central parent directory, such as PT-CONTEXT=/mnt/pt-context')
     parser.add_argument('--center-agent', help='Legacy setting; agents now orbit the workstation star')
@@ -52,6 +54,18 @@ def main() -> None:
                 parser.error('--root must be LABEL=PATH')
             roots.append({'label': label.strip(), 'path': str(Path(path).expanduser().resolve())})
         data['roots'] = roots
+    if args.mempalace_system:
+        label, separator, path = args.mempalace_system.partition('=')
+        if not separator or not label.strip() or not path.strip():
+            parser.error('--mempalace-system must be LABEL=DIR')
+        data['roots'] = [item for item in data['roots'] if item.get('type') != 'mempalace']
+        data['roots'].append({'label': label.strip(), 'path': str(Path(path).expanduser().resolve()),
+                              'type': 'mempalace', 'max_memories': args.memory_planets if args.memory_planets is not None else 20})
+    elif args.memory_planets is not None:
+        system = next((item for item in data['roots'] if item.get('type') == 'mempalace'), None)
+        if system is None:
+            parser.error('--memory-planets requires an existing or new MemPalace solar system')
+        system['max_memories'] = args.memory_planets
     if args.center_agent is not None:
         data['center_agent'] = args.center_agent
     if args.host_name is not None:
