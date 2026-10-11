@@ -3,9 +3,9 @@ import Cairo from 'cairo';
 import GLib from 'gi://GLib';
 import {renderGalaxy, DEFAULT_SETTINGS} from './galaxy.js';
 
-const [scenePath, outputPath, widthText, heightText, foregroundPath, phaseText] = ARGV;
+const [scenePath, outputPath, widthText, heightText, foregroundPath, phaseText, focusText] = ARGV;
 if (!scenePath || !outputPath)
-    throw new Error('Usage: gjs -m render-preview.js SCENE.json OUTPUT.png [width height foreground.png]');
+    throw new Error('Usage: gjs -m render-preview.js SCENE.json OUTPUT.png [width height foreground.png phase [focus.json]]');
 const width = Math.max(320, Number(widthText) || 1920);
 const height = Math.max(240, Number(heightText) || 1080);
 const [ok, bytes] = GLib.file_get_contents(scenePath);
@@ -15,6 +15,7 @@ const foreground = foregroundPath ? Cairo.ImageSurface.createFromPNG(foregroundP
 const surface = new Cairo.ImageSurface(Cairo.Format.ARGB32, width, height);
 const cr = new Cairo.Context(surface);
 const phase = phaseText === undefined ? 0.24 : Number(phaseText);
-renderGalaxy(cr, width, height, scene, DEFAULT_SETTINGS, phase, 1.8, foreground);
+const focus = focusText ? JSON.parse(focusText) : null;
+renderGalaxy(cr, width, height, scene, DEFAULT_SETTINGS, phase, 1.8, foreground, focus);
 cr.$dispose();
 surface.writeToPNG(outputPath);

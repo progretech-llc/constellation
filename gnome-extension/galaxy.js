@@ -67,6 +67,75 @@ function project(x, y, z, phase, width, height, skyMode) {
         height * (skyMode ? 0.265 : 0.5) + ry * scale * (skyMode ? 0.43 : 0.77) + z * scale * 0.11];
 }
 
+export function layoutScene(scene, phase, width, height, skyMode, focus = null) {
+    const nodes = scene?.nodes ?? [];
+    const bases = new Map(nodes.filter(node => node.id).map(node => [node.id, node]));
+    const positions = new Map();
+    for (const node of nodes) {
+        if (!node.id) continue;
+        const parent = bases.get(node.orbit_parent);
+        const movingParent = positions.get(node.orbit_parent);
+        if (!parent || !movingParent) {
+            positions.set(node.id, {x: node.x, y: node.y, z: node.z});
+            continue;
+        }
+        // Integer multiples keep orbits continuous when the scene phase wraps at 2π.
+        const speed = node.kind === 'Remembered file' ? 3 : 1;
+        const angle = phase * speed;
+        const dx = node.x - parent.x, dy = node.y - parent.y;
+        positions.set(node.id, {
+            x: movingParent.x + dx * Math.cos(angle) - dy * Math.sin(angle),
+            y: movingParent.y + dx * Math.sin(angle) + dy * Math.cos(angle),
+            z: movingParent.z + node.z - parent.z,
+        });
+    }
+    const visible = new Set();
+    if (!focus) {
+        nodes.forEach((_, index) => visible.add(index));
+    } else {
+        nodes.forEach((node, index) => {
+            if (node.kind === 'Agent') return;
+            if (node.root !== focus.root) return;
+            if (node.kind === 'Directory system') {
+                if (focus.kind === 'Directory system') visible.add(index);
+            } else if (focus.kind === 'Directory system' ||
+                       node.path === focus.path || node.path?.startsWith(`${focus.path}/`)) {
+                visible.add(index);
+            }
+        });
+        for (const link of scene.links ?? []) {
+            if (visible.has(link.to)) visible.add(link.from);
+        }
+    }
+    const anchorNode = focus ? nodes.find(node => node.kind === focus.kind &&
+        node.root === focus.root && node.path === focus.path) : null;
+    const anchor = positions.get(anchorNode?.id) ?? anchorNode;
+    const zoom = focus ? (focus.kind === 'Directory system' ? 1.9 : 2.6) : 1;
+    const base = project(0, 0, 0, phase, width, height, skyMode);
+    const coordinates = nodes.map(node => {
+        const position = positions.get(node.id) ?? node;
+        const point = project(position.x - (anchor?.x ?? 0), position.y - (anchor?.y ?? 0),
+            position.z - (anchor?.z ?? 0), phase, width, height, skyMode);
+        return [base[0] + (point[0] - base[0]) * zoom,
+            base[1] + (point[1] - base[1]) * zoom];
+    });
+    return {coordinates, visible, positions};
+}
+
+export function hitTest(scene, coordinates, visible, x, y) {
+    let best = null;
+    for (let i = 0; i < scene.nodes.length; i++) {
+        if (!visible.has(i)) continue;
+        const node = scene.nodes[i];
+        if (!['Directory system', 'Remembered directory', 'Remembered file'].includes(node.kind) || !node.path) continue;
+        const [px, py] = coordinates[i];
+        const radius = node.kind === 'Directory system' ? 27 : node.kind === 'Remembered directory' ? 16 : 11;
+        const distance = Math.hypot(x - px, y - py) / radius;
+        if (distance <= 1 && (!best || distance < best.distance)) best = {node, distance};
+    }
+    return best?.node ?? null;
+}
+
 function background(cr, width, height, settings, skyMode) {
     cr.setSourceRGB(0.018, 0.027, 0.049);
     cr.paint();
@@ -160,7 +229,32 @@ function paintForeground(cr, width, height, image) {
     cr.restore();
 }
 
-export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTINGS, phase = 0, time = 0, foreground = null) {
+function attribution(cr, width, height) {
+    const title = 'CONSTELLATION BY PROGRETECH';
+    const notice = '© 2026 PROGRETECH LLC';
+    cr.save();
+    cr.selectFontFace('Sans', Cairo.FontSlant.NORMAL, Cairo.FontWeight.BOLD);
+    cr.setFontSize(11);
+    const titleWidth = cr.textExtents(title).width;
+    cr.setFontSize(9);
+    const noticeWidth = cr.textExtents(notice).width;
+    const boxWidth = Math.max(titleWidth, noticeWidth) + 24;
+    const left = Math.max(8, width - boxWidth - 14);
+    const top = Math.max(8, height - 57);
+    cr.setSourceRGBA(0.018, 0.027, 0.049, 0.78);
+    cr.rectangle(left, top, boxWidth, 43);
+    cr.fill();
+    cr.setSourceRGBA(0.85, 0.93, 1, 0.96);
+    cr.setFontSize(11);
+    cr.moveTo(left + boxWidth - titleWidth - 12, top + 18);
+    cr.showText(title);
+    cr.setFontSize(9);
+    cr.moveTo(left + boxWidth - noticeWidth - 12, top + 33);
+    cr.showText(notice);
+    cr.restore();
+}
+
+export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTINGS, phase = 0, time = 0, foreground = null, focus = null) {
     const skyMode = settings.foreground !== false && foreground !== null;
     background(cr, width, height, settings, skyMode);
     spiralDust(cr, phase, width, height, settings, skyMode);
@@ -168,15 +262,16 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
     if (!scene || !Array.isArray(scene.nodes)) {
         if (skyMode) paintForeground(cr, width, height, foreground);
         label(cr, width * 0.5, height - 24, 'MEMORY SCENE UNAVAILABLE', '#ed9a92', 10);
+        attribution(cr, width, height);
         return;
     }
-    const coordinates = scene.nodes.map(node => project(node.x, node.y, node.z, phase, width, height, skyMode));
+    const {coordinates, visible} = layoutScene(scene, phase, width, height, skyMode, focus);
     const intensity = Number(settings.glow ?? DEFAULT_SETTINGS.glow);
     if (settings.links !== false && Array.isArray(scene.links)) {
         for (let i = 0; i < scene.links.length; i++) {
             const link = scene.links[i];
             const a = coordinates[link.from], b = coordinates[link.to];
-            if (!a || !b) continue;
+            if (!a || !b || !visible.has(link.from) || !visible.has(link.to)) continue;
             line(cr, ...a, ...b, link.color, 0.22, 0.9);
             const direction = ((time * 0.24 + i * 0.127) % 2);
             const t = direction <= 1 ? direction : 2 - direction;
@@ -186,6 +281,7 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
         }
     }
     for (let i = 0; i < scene.nodes.length; i++) {
+        if (!visible.has(i)) continue;
         const node = scene.nodes[i], [x, y] = coordinates[i];
         if (node.kind === 'Directory system') {
             glow(cr, x, y, 37, node.color, 0.43 * intensity);
@@ -193,7 +289,7 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
             circle(cr, x, y, 2.5, '#ffffff', 0.76);
             if (settings.labels !== false) label(cr, x, y - 17, node.name.toUpperCase(), '#d5e7f7', 10);
         } else if (node.kind === 'Agent') {
-            const core = node.name === 'Odexi';
+            const core = node.action === 'center';
             glow(cr, x, y, core ? 71 : 29, node.color, (core ? 0.61 : 0.43) * intensity * node.alpha);
             circle(cr, x, y, core ? 10 : 5.3, node.color, node.alpha);
             if (core) {
@@ -214,11 +310,14 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
         }
     }
     if (skyMode) paintForeground(cr, width, height, foreground);
+    if (focus) label(cr, Math.min(width * 0.47, 410), 44,
+        `FOCUS: ${focus.name.toUpperCase()}  ·  ALT+CLICK AGAIN TO RESET`, '#c7dcf4', 10);
     const counts = scene.counts ?? {};
     source(cr, '#a0b9cc', 0.59);
     cr.selectFontFace('Sans', Cairo.FontSlant.NORMAL, Cairo.FontWeight.NORMAL);
     cr.setFontSize(10);
-    cr.moveTo(Math.max(18, width - 410), height - 23);
+    cr.moveTo(18, height - 23);
     const stale = !Number.isFinite(scene.generated_at) || Date.now() / 1000 - scene.generated_at > 360;
-    cr.showText(`CONSTELLATION BY PROGRETECH  ·  ${counts.files ?? 0} REMEMBERED FILES${stale ? '  ·  MEMORY STALE' : ''}`);
+    cr.showText(`${counts.files ?? 0} REMEMBERED FILES${stale ? '  ·  MEMORY STALE' : ''}`);
+    attribution(cr, width, height);
 }
