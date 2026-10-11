@@ -229,7 +229,7 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
                 cr.arc(x, y, 18, 0, TAU);
                 cr.stroke();
             }
-            if (settings.labels !== false && (core || node.alpha > 0.6))
+            if (settings.labels !== false)
                 label(cr, x, y + (core ? 32 : 19), node.name.toUpperCase(), node.color, core ? 12 : 9);
         } else if (node.kind === 'Remembered directory') {
             glow(cr, x, y, 14, node.color, 0.18 * intensity);
