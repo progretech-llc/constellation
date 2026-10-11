@@ -1,0 +1,7 @@
+{
+  "uuid": "factory-observatory@progretech.com",
+  "name": "Factory Observatory Wallpaper",
+  "description": "A rotating galaxy map of reviewed ProgreTech factory memory, drawn behind desktop content.",
+  "shell-version": ["50"],
+  "version": 1
+}
