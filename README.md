@@ -33,7 +33,10 @@ python3 -m venv .venv
 The installer creates a **Factory Observatory** menu entry that opens the native
 GTK controls, installs a user GNOME Shell extension in the background layer, and
 enables a user timer that refreshes the memory scene every two minutes. The
-wallpaper starts rotating automatically. The controls offer pause, rotation
+wallpaper starts rotating automatically once the extension is active. On a first
+install into an already running GNOME Wayland session, the extension may become
+active only after logging out and back in; the installer marks it enabled for
+that next login. The controls offer pause, rotation
 speed, nebula glow, rays, star density, link trails, labels, a manual memory
 refresh, and an **Open interactive map** button. The shell extension watches the
 local settings/scene files; no browser needs to remain open. It leaves GNOME's

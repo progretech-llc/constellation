@@ -59,5 +59,18 @@ if [[ ! -f "$extension_zip" ]]; then
   exit 1
 fi
 gnome-extensions install --force "$extension_zip"
-gnome-extensions enable factory-observatory@progretech.com
-printf 'Installed Factory Observatory controls, refresh timer, and GNOME wallpaper extension.\n'
+if gnome-extensions info factory-observatory@progretech.com >/dev/null 2>&1; then
+  gnome-extensions enable factory-observatory@progretech.com
+  printf 'Installed and enabled Factory Observatory controls, refresh timer, and GNOME wallpaper extension.\n'
+else
+  python3 - <<'PY'
+from gi.repository import Gio
+settings = Gio.Settings.new('org.gnome.shell')
+extensions = list(settings.get_strv('enabled-extensions'))
+uuid = 'factory-observatory@progretech.com'
+if uuid not in extensions:
+    extensions.append(uuid)
+    settings.set_strv('enabled-extensions', extensions)
+PY
+  printf 'Installed Factory Observatory. GNOME Wayland will load the new extension at the next login.\n'
+fi
