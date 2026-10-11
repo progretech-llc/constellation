@@ -1,0 +1,7 @@
+# Progre foreground and brand asset terms
+
+`progre-foreground.png` depicts Progre, the ProgreTech mascot, in a rooftop scene. `constellation-preview.png` is an owner-supplied screenshot of the running wallpaper. © 2026 ProgreTech LLC. All rights reserved to the extent permitted by law. Progre, the mascot design and likeness, “ProgreTech,” and “Constellation by ProgreTech” are ProgreTech brand identifiers. The repository's MIT code license does **not** license these images or brand identifiers.
+
+ProgreTech grants permission to download, install, and display the unmodified foreground image as part of an official Constellation by ProgreTech release for personal or internal use, and to display the unmodified preview when sharing the official repository. You may share an unmodified official release, including this notice and its on-screen ProgreTech attribution. No permission is granted to extract or redistribute either image on its own, modify them, train a model on them, use them in another product, or represent a fork or derivative as an official ProgreTech release. Forks that change the program or branding should replace the Progre image and preview with artwork they have rights to use. Other uses need separate written permission from ProgreTech LLC.
+
+This permission does not waive rights that applicable law grants users independently. It grants no ownership or trademark rights.

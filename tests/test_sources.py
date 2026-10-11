@@ -1,0 +1,105 @@
+"""End-to-end source checks using a disposable, synthetic activity directory."""
+import importlib
+import json
+import os
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+
+class ConfiguredSourcesTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.base = Path(self.temp.name)
+        self.root = self.base / 'Projects'
+        self.root.mkdir()
+        self.file = self.root / 'report.md'
+        self.file.write_text('test')
+        self.memory = self.base / 'memory'
+        self.memory.mkdir()
+        self.config = self.base / 'sources.json'
+        os.environ['CONSTELLATION_CONFIG'] = str(self.config)
+        self.config.write_text(json.dumps({
+            'memory': {'provider': 'json', 'directory': str(self.memory)},
+            'roots': [{'label': 'Projects', 'path': str(self.root)}],
+            'center_agent': 'lead', 'agents': ['lead', 'worker']
+        }))
+        import config
+        import memory_map
+        importlib.reload(config)
+        self.map = importlib.reload(memory_map)
+
+    def tearDown(self):
+        os.environ.pop('CONSTELLATION_CONFIG', None)
+        self.temp.cleanup()
+
+    def test_json_activity_creates_one_file_and_agent_link(self):
+        (self.memory / '001.json').write_text(json.dumps({
+            'memory_id': 'reviewed-1', 'author': 'worker', 'project': 'Example',
+            'technical_steps': [f'Created {self.file}'], 'evidence': [str(self.file)]
+        }))
+        activities = self.map.read_activities()
+        files, agents = self.map.build_catalog(activities)
+        self.assertEqual(len(files), 1)
+        self.assertEqual(files[0].agents['worker'], 'created')
+        self.assertEqual(agents, ['worker'])
+        self.assertEqual(self.map.recent_links(files, agents)[0][1], str(self.file))
+
+    def test_outside_root_and_sensitive_paths_are_excluded(self):
+        outside = self.base / 'outside.md'
+        outside.write_text('private')
+        secret_dir = self.root / '.ssh'
+        secret_dir.mkdir()
+        secret = secret_dir / 'id_rsa'
+        secret.write_text('do not read')
+        self.assertEqual(self.map._paths(f'Opened {outside}'), [])
+        self.assertEqual(self.map._paths(f'Opened {secret}'), [])
+
+    def test_only_reviewed_mempalace_activity_is_parsed(self):
+        self.map.MEMORY['project'] = 'Example'
+        output = '''a1b2c3d4 [project/active] Activity: example
+  author: agent/worker
+  project: Example
+  provenance_type: structured-agent-activity
+  Technical steps:
+- Created /tmp/report.md
+  Evidence:
+- /tmp/report.md
+'''
+        self.assertEqual(len(self.map._parse_cli_output(output)), 1)
+        self.assertEqual(self.map._parse_cli_output(output.replace('structured-agent-activity', 'other')), [])
+        self.assertEqual(self.map._parse_cli_output(output.replace('  provenance_type: structured-agent-activity\n', '')), [])
+
+    def test_mempalace_uses_configured_identity_and_project(self):
+        self.map.MEMORY.update({'provider': 'mempalace', 'cli': '/example/mempalace',
+                                'agent': 'my-agent', 'project': 'Example'})
+        output = '''a1b2c3d4 [project/active] Activity: example
+  author: agent/worker
+  project: Example
+  provenance_type: structured-agent-activity
+  Technical steps:
+- Created /tmp/report.md
+  Evidence:
+- /tmp/report.md
+'''
+        with patch.object(self.map.subprocess, 'run') as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = output
+            activities = self.map.read_activities()
+        self.assertEqual(len(activities), 1)
+        self.assertEqual(run.call_args_list[0].args[0][:4], ['/example/mempalace', '--agent', 'my-agent', 'list'])
+        self.assertIn('Example', run.call_args_list[1].args[0])
+
+    def test_file_cap_replaces_older_nodes(self):
+        second = self.root / 'second.md'
+        second.write_text('test')
+        self.map.MAX_FILES = 1
+        activities = [self.map.Activity('new', 'worker', 'Example', [f'Created {self.file}']),
+                      self.map.Activity('old', 'worker', 'Example', [f'Created {second}'])]
+        files, _ = self.map.build_catalog(activities)
+        self.assertEqual([item.path for item in files], [str(self.file)])
+
+
+if __name__ == '__main__':
+    unittest.main()

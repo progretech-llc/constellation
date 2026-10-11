@@ -1,0 +1,12 @@
+{
+  "memory": {
+    "provider": "json",
+    "directory": "~/.local/share/constellation/memory"
+  },
+  "roots": [
+    {"label": "Home", "path": "~/Documents"},
+    {"label": "Projects", "path": "~/Projects"}
+  ],
+  "center_agent": "",
+  "agents": []
+}
