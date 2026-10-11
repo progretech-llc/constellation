@@ -193,7 +193,7 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
             circle(cr, x, y, 2.5, '#ffffff', 0.76);
             if (settings.labels !== false) label(cr, x, y - 17, node.name.toUpperCase(), '#d5e7f7', 10);
         } else if (node.kind === 'Agent') {
-            const core = node.name === 'Odexi / Codex';
+            const core = node.name === 'Odexi';
             glow(cr, x, y, core ? 71 : 29, node.color, (core ? 0.61 : 0.43) * intensity * node.alpha);
             circle(cr, x, y, core ? 10 : 5.3, node.color, node.alpha);
             if (core) {
@@ -203,7 +203,7 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
                 cr.arc(x, y, 18, 0, TAU);
                 cr.stroke();
             }
-            if (settings.labels !== false && (core || node.alpha > 0.6))
+            if (settings.labels !== false)
                 label(cr, x, y + (core ? 32 : 19), node.name.toUpperCase(), node.color, core ? 12 : 9);
         } else if (node.kind === 'Remembered directory') {
             glow(cr, x, y, 14, node.color, 0.18 * intensity);

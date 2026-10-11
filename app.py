@@ -27,23 +27,22 @@ from memory_map import ROOTS, build_catalog, read_activities, recent_links
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "build" / "factory-observatory.html"
 ROOT_COLORS = {
-    "Rend": "#7ed6c3", "Repositories": "#6d9fff", "Pictures": "#e99e70",
-    "Job artifacts": "#a18dff", "Deliverables": "#e7c46b", "PT_CONTEXT": "#7fa8d7",
+    "MS-S1 Max": "#7ed6c3", "Repositories": "#6d9fff", "Pictures": "#e99e70",
+    "Job artifacts": "#a18dff", "Deliverables": "#e7c46b",
 }
 AGENT_COLORS = {
     "codex": "#f5a86b", "rend": "#61d6c5", "lyra": "#e9ce73",
     "mak": "#7caeff", "progre": "#c798ff", "imagen": "#ff7d9d",
-    "moxy": "#78dcec", "factory-worker": "#b4c5d5",
+    "moxy": "#78dcec",
 }
 ACTION_COLORS = {"modified": "#ffc978", "created": "#ee8cae", "accessed": "#90d8c6", "referenced": "#8396ae"}
 ACTIVE_ROLES = ("codex", "rend", "lyra", "mak", "progre", "imagen", "moxy")
 ROOT_CENTERS = {
-    "Rend": (-5.25, 2.2, -0.4),
+    "MS-S1 Max": (-5.25, 2.2, -0.4),
     "Repositories": (0.0, 4.35, 0.8),
     "Pictures": (5.2, 2.1, -0.6),
     "Job artifacts": (4.7, -2.6, 0.5),
     "Deliverables": (0.0, -4.65, -0.4),
-    "PT_CONTEXT": (-4.8, -2.65, 0.6),
 }
 
 
@@ -63,7 +62,7 @@ def _project(x: float, y: float, z: float, angle: float) -> tuple[float, float, 
 
 
 def _build_scene(files, active_agents):
-    author_order = [*ACTIVE_ROLES, *sorted(set(active_agents) - set(ACTIVE_ROLES))]
+    author_order = list(ACTIVE_ROLES)
     nodes = {key: [] for key in ("x", "y", "depth", "bx", "by", "bz", "size", "color", "alpha", "name", "kind", "detail", "action", "memory")}
     labels = {key: [] for key in ("x", "y", "bx", "by", "bz", "text", "color")}
     node_index: dict[str, int] = {}
@@ -122,7 +121,7 @@ def _build_scene(files, active_agents):
             theta = index * 2 * math.pi / max(1, len(noncentral)) + 0.13
             xyz = (1.72 * math.cos(theta), 1.55 * math.sin(theta), (_hash01(agent) - 0.5) * 0.8)
         has_files = agent in active_agents
-        node("agent:" + agent, "Odexi / Codex" if agent == "codex" else agent.title(), "Agent", "Shared reviewed file references: " + str(sum(agent in item.agents for item in files)), "", "", xyz, 15 if agent == "codex" else 11.5, AGENT_COLORS.get(agent, "#aab9ce"), 0.96 if has_files else 0.42, label=agent in ACTIVE_ROLES or has_files)
+        node("agent:" + agent, "Odexi" if agent == "codex" else agent.title(), "Agent", "Shared reviewed file references: " + str(sum(agent in item.agents for item in files)), "", "", xyz, 15 if agent == "codex" else 11.5, AGENT_COLORS.get(agent, "#aab9ce"), 0.96 if has_files else 0.42, label=agent in ACTIVE_ROLES or has_files)
 
     links = {key: [] for key in ("xs", "ys", "source_idx", "target_idx", "color", "alpha", "size")}
     for agent, file_path, action in recent_links(files, active_agents):
@@ -189,7 +188,7 @@ def _page_html(*, refresh_seconds: int | None = None) -> tuple[str, int, int, in
         nodes.change.emit();
         const l=labels.data;
         for(let i=0;i<l.x.length;i++) {
-            const p=project(l.bx[i],l.by[i],l.bz[i]);l.x[i]=p[0];l.y[i]=p[1]+(l.text[i]==='Odexi / Codex'?-0.36:0.29);
+            const p=project(l.bx[i],l.by[i],l.bz[i]);l.x[i]=p[0];l.y[i]=p[1]+(l.text[i]==='Odexi'?-0.36:0.29);
         }
         labels.change.emit();
         const e=links.data;

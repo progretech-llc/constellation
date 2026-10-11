@@ -24,13 +24,19 @@ MAX_LINKS_PER_AGENT = 7
 MIN_FILES_PER_AGENT = 4
 
 ROOTS = (
-    ("Rend", Path("/home/edwin/Rend")),
+    ("MS-S1 Max", Path("/home/edwin/Rend")),
     ("Repositories", Path("/home/edwin/PycharmProjects")),
     ("Pictures", Path("/home/edwin/Pictures")),
     ("Job artifacts", Path("/mnt/pt-context/job-artifacts")),
     ("Deliverables", Path("/mnt/pt-context/deliverables")),
-    ("PT_CONTEXT", Path("/mnt/pt-context/projects")),
 )
+ROOT_PATH_ALIASES = (("Repositories", Path("/mnt/pt-context/projects/PycharmProjects")),)
+DISPLAY_AGENTS = frozenset({"codex", "rend", "lyra", "mak", "progre", "imagen", "moxy"})
+
+
+def _display_agent(author: str) -> str:
+    """Consolidate retired author nodes for display; leave memory provenance intact."""
+    return author if author in DISPLAY_AGENTS else "rend"
 
 HEADER = re.compile(r"^([0-9a-f]{8}) \[([^/]+)/([^\]]+)\] (.+)$")
 PATH = re.compile(r"(?<![A-Za-z0-9])(?:/home/edwin|/mnt/pt-context)/[^\s\"'<>|),;\]]+")
@@ -138,7 +144,7 @@ def _classify(step: str) -> str:
 
 
 def _root_for(path: Path) -> str | None:
-    for label, root in ROOTS:
+    for label, root in (*ROOTS, *ROOT_PATH_ALIASES):
         if path == root or path.is_relative_to(root):
             return label
     return None
@@ -160,7 +166,7 @@ def _safe_file(candidate: str) -> tuple[str, str, str] | None:
         return None
     if not resolved.is_file() or any(segment in BLOCKED_SEGMENTS or segment.startswith(".") or SENSITIVE_SEGMENT.search(segment) for segment in resolved.parts):
         return None
-    if not (_root_for(resolved) or (resolved.is_relative_to(Path("/mnt/pt-context")) and root == "Rend")):
+    if not (_root_for(resolved) or (resolved.is_relative_to(Path("/mnt/pt-context")) and root == "MS-S1 Max")):
         return None
     return str(raw_path), str(raw_path.parent), root
 
@@ -178,12 +184,13 @@ def build_catalog(activities: list[Activity]) -> tuple[list[FileReference], list
     files: dict[str, FileReference] = {}
     agents: list[str] = []
     for rank, activity in enumerate(activities):
-        if activity.author not in agents:
-            agents.append(activity.author)
+        display_agent = _display_agent(activity.author)
+        if display_agent not in agents:
+            agents.append(display_agent)
         seen_this_activity: set[tuple[str, str]] = set()
         for text, action in [(step, _classify(step)) for step in activity.steps] + [(evidence, "referenced") for evidence in activity.evidence]:
             for path, directory, root in _paths(text):
-                marker = (path, activity.author)
+                marker = (path, display_agent)
                 if marker in seen_this_activity and action == "referenced":
                     continue
                 seen_this_activity.add(marker)
@@ -191,10 +198,10 @@ def build_catalog(activities: list[Activity]) -> tuple[list[FileReference], list
                 item.newest_rank = min(item.newest_rank, rank)
                 if activity.memory_id not in item.memory_ids:
                     item.memory_ids.append(activity.memory_id)
-                previous = item.agents.get(activity.author)
+                previous = item.agents.get(display_agent)
                 priority = {"referenced": 0, "accessed": 1, "created": 2, "modified": 3}
                 if previous is None or priority[action] > priority[previous]:
-                    item.agents[activity.author] = action
+                    item.agents[display_agent] = action
     newest = sorted(files.values(), key=lambda item: (item.newest_rank, item.path))
     kept_directories: set[str] = set()
     selected: list[FileReference] = []
