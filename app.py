@@ -68,19 +68,21 @@ def _project(x: float, y: float, z: float, angle: float) -> tuple[float, float, 
 def _build_scene(files, active_agents):
     author_order = list(dict.fromkeys([*([CENTER_AGENT] if CENTER_AGENT else []), *ACTIVE_ROLES,
                                        *sorted(set(active_agents) - set(ACTIVE_ROLES))]))
-    nodes = {key: [] for key in ("x", "y", "depth", "bx", "by", "bz", "size", "color", "alpha", "name", "kind", "detail", "action", "memory")}
+    nodes = {key: [] for key in ("id", "orbit_parent", "x", "y", "depth", "bx", "by", "bz", "size", "color", "alpha", "name", "kind", "detail", "action", "memory", "path", "root", "memory_project")}
     labels = {key: [] for key in ("x", "y", "bx", "by", "bz", "text", "color", "kind")}
     node_index: dict[str, int] = {}
     position: dict[str, tuple[float, float, float]] = {}
 
-    def node(key, name, kind, detail, action, memory, xyz, size, color, alpha=0.92, label=False):
+    def node(key, name, kind, detail, action, memory, xyz, size, color, alpha=0.92, label=False, path="", root="", memory_project="", orbit_parent=""):
         px, py, depth = _project(*xyz, 0.35)
         node_index[key] = len(nodes["x"])
         position[key] = xyz
         for column, value in {
+            "id": key, "orbit_parent": orbit_parent,
             "x": px, "y": py, "depth": depth, "bx": xyz[0], "by": xyz[1], "bz": xyz[2],
             "size": size, "color": color, "alpha": alpha, "name": name, "kind": kind,
-            "detail": detail, "action": action, "memory": memory,
+            "detail": detail, "action": action, "memory": memory, "path": path,
+            "root": root, "memory_project": memory_project,
         }.items():
             nodes[column].append(value)
         if label:
@@ -88,25 +90,37 @@ def _build_scene(files, active_agents):
                 labels[column].append(value)
 
     for label, path in ROOTS:
-        node("root:" + label, label, "Directory system", str(path), "", "", ROOT_CENTERS[label], 19, ROOT_COLORS[label], label=True)
+        node("root:" + label, label, "Directory system", str(path), "", "", ROOT_CENTERS[label], 19, ROOT_COLORS[label], label=True, path=str(path), root=label)
 
-    directories = sorted({(item.root, item.directory) for item in files})
+    directories = sorted({(item.root, item.directory) for item in files},
+                         key=lambda pair: (len(Path(pair[1]).parts), pair[0], pair[1]))
     by_root: dict[str, list[str]] = defaultdict(list)
     for root, directory in directories:
         by_root[root].append(directory)
     counts = Counter(item.directory for item in files)
+    child_counts: dict[str, int] = defaultdict(int)
     for root, paths in by_root.items():
-        cx, cy, cz = ROOT_CENTERS[root]
-        for index, directory in enumerate(paths):
+        for directory in paths:
             root_path = next(path for label, path in ROOTS if label == root)
             if directory == str(root_path):
                 position["dir:" + directory] = ROOT_CENTERS[root]
                 continue
+            parent_key = "root:" + root
+            parent_path = Path(directory).parent
+            while parent_path != parent_path.parent:
+                candidate = "dir:" + str(parent_path)
+                if candidate in node_index:
+                    parent_key = candidate
+                    break
+                parent_path = parent_path.parent
+            index = child_counts[parent_key]
+            child_counts[parent_key] += 1
+            cx, cy, cz = position[parent_key]
             angle = index * 2.399963229728653 + _hash01(directory) * 0.5
-            radius = 0.77 + 0.16 * math.sqrt(index + 1)
+            radius = 0.58 + 0.12 * math.sqrt(index + 1)
             xyz = (cx + radius * math.cos(angle), cy + radius * math.sin(angle) * 0.82, cz + (_hash01(directory, 4) - 0.5) * 1.1)
             name = Path(directory).name or directory
-            node("dir:" + directory, name, "Remembered directory", directory + " · " + str(counts[directory]) + " remembered files", "", "", xyz, 8.5, ROOT_COLORS[root], 0.82, label=counts[directory] >= 3 and index < 5)
+            node("dir:" + directory, name, "Remembered directory", directory + " · " + str(counts[directory]) + " remembered files", "", "", xyz, 8.5, ROOT_COLORS[root], 0.82, label=counts[directory] >= 3 and index < 5, path=directory, root=root, orbit_parent=parent_key)
 
     action_priority = {"referenced": 0, "accessed": 1, "created": 2, "modified": 3}
     for item in files:
@@ -116,7 +130,8 @@ def _build_scene(files, active_agents):
         xyz = (parent[0] + math.cos(theta) * radius, parent[1] + math.sin(theta) * radius * 0.75, parent[2] + (_hash01(item.path, 8) - 0.5) * 0.9)
         action = max(item.agents.values(), key=lambda value: action_priority[value])
         actors = ", ".join(sorted(item.agents))
-        node("file:" + item.path, Path(item.path).name, "Remembered file", item.path + " · agents: " + actors, action, ", ".join(item.memory_ids[:4]), xyz, 5.3, ACTION_COLORS[action], 0.78)
+        parent_key = "dir:" + item.directory if "dir:" + item.directory in node_index else "root:" + item.root
+        node("file:" + item.path, Path(item.path).name, "Remembered file", item.path + " · agents: " + actors, action, ", ".join(item.memory_ids[:4]), xyz, 5.3, ACTION_COLORS[action], 0.78, path=item.path, root=item.root, memory_project=item.memory_projects[0] if item.memory_projects else "", orbit_parent=parent_key)
 
     noncentral = [agent for agent in author_order if agent != CENTER_AGENT]
     for index, agent in enumerate(author_order):

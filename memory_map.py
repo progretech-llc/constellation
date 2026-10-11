@@ -62,6 +62,7 @@ class FileReference:
     root: str
     agents: dict[str, str] = field(default_factory=dict)
     memory_ids: list[str] = field(default_factory=list)
+    memory_projects: list[str] = field(default_factory=list)
     newest_rank: int = 10**9
 
 
@@ -233,6 +234,7 @@ def build_catalog(activities: list[Activity]) -> tuple[list[FileReference], list
                 item.newest_rank = min(item.newest_rank, rank)
                 if activity.memory_id not in item.memory_ids:
                     item.memory_ids.append(activity.memory_id)
+                    item.memory_projects.append(activity.project)
                 previous = item.agents.get(display_agent)
                 priority = {"referenced": 0, "accessed": 1, "created": 2, "modified": 3}
                 if previous is None or priority[action] > priority[previous]:
