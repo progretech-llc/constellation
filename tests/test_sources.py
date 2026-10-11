@@ -23,6 +23,7 @@ class ConfiguredSourcesTests(unittest.TestCase):
         self.config.write_text(json.dumps({
             'memory': {'provider': 'json', 'directory': str(self.memory)},
             'roots': [{'label': 'Projects', 'path': str(self.root)}],
+            'host_name': 'Test Workstation', 'galaxy': {'label': 'Test galaxy', 'path': str(self.base)},
             'center_agent': 'lead', 'agents': ['lead', 'worker']
         }))
         import config
@@ -45,6 +46,31 @@ class ConfiguredSourcesTests(unittest.TestCase):
         self.assertEqual(files[0].agents['worker'], 'created')
         self.assertEqual(agents, ['worker'])
         self.assertEqual(self.map.recent_links(files, agents)[0][1], str(self.file))
+
+    def test_host_is_center_and_agents_link_to_remembered_files(self):
+        activities = [self.map.Activity('reviewed-1', 'worker', 'Example', [f'Created {self.file}'])]
+        files, agents = self.map.build_catalog(activities)
+        import app
+        app = importlib.reload(app)
+        nodes, _, links, _ = app._build_scene(files, agents)
+        by_id = {key: index for index, key in enumerate(nodes['id'])}
+        self.assertEqual(nodes['kind'][by_id['host']], 'Host')
+        self.assertEqual(nodes['name'][by_id['host']], 'Test Workstation')
+        self.assertEqual(nodes['path'][by_id['host']], str(self.base))
+        self.assertEqual(nodes['orbit_parent'][by_id['root:Projects']], 'host')
+        self.assertEqual(nodes['orbit_parent'][by_id['agent:worker']], 'host')
+        self.assertEqual(nodes['orbit_parent'][by_id['file:' + str(self.file)]], 'root:Projects')
+        self.assertEqual(links['source_idx'], [by_id['agent:worker']])
+        self.assertEqual(links['target_idx'], [by_id['file:' + str(self.file)]])
+        (self.memory / '001.json').write_text(json.dumps({
+            'memory_id': 'reviewed-1', 'author': 'worker', 'project': 'Example',
+            'technical_steps': [f'Created {self.file}'], 'evidence': []
+        }))
+        import wallpaper_scene
+        scene = importlib.reload(wallpaper_scene).make_scene()
+        self.assertEqual(scene['galaxy'], {'label': 'Test galaxy', 'path': str(self.base)})
+        self.assertEqual(scene['nodes'][0]['name'], 'Test Workstation')
+        self.assertEqual(scene['links'][0]['from'], by_id['agent:worker'])
 
     def test_outside_root_and_sensitive_paths_are_excluded(self):
         outside = self.base / 'outside.md'

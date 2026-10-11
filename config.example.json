@@ -7,7 +7,8 @@
     {"label": "Home", "path": "~/Documents"},
     {"label": "Projects", "path": "~/Projects"}
   ],
-  "center_agent": "",
+  "host_name": "My Workstation",
+  "galaxy": {"label": "Home", "path": "~"},
   "agents": [],
   "agent_aliases": {},
   "unlisted_agent": ""

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Choose the local memory source, directory systems, and central agent."""
+"""Choose the local memory source, galaxy, host name, and directory systems."""
 from __future__ import annotations
 
 import argparse
@@ -19,7 +19,9 @@ def main() -> None:
     parser.add_argument('--agent', help='Your own MemPalace identity (with --mempalace-cli)')
     parser.add_argument('--project', help='MemPalace project (with --mempalace-cli)')
     parser.add_argument('--root', action='append', metavar='LABEL=PATH', help='Solar system directory; repeat to replace all roots')
-    parser.add_argument('--center-agent', help='Agent ID to place at the center')
+    parser.add_argument('--host-name', help='Central workstation star name (defaults to the system hostname)')
+    parser.add_argument('--galaxy', metavar='LABEL=PATH', help='Central parent directory, such as PT-CONTEXT=/mnt/pt-context')
+    parser.add_argument('--center-agent', help='Legacy setting; agents now orbit the workstation star')
     parser.add_argument('--agents', nargs='+', help='Known agent IDs to show even when quiet')
     parser.add_argument('--alias', action='append', metavar='OLD=NEW', help='Display an old author under a current agent; repeatable')
     parser.add_argument('--unlisted-agent', help='Display other unlisted authors under this configured agent')
@@ -52,6 +54,13 @@ def main() -> None:
         data['roots'] = roots
     if args.center_agent is not None:
         data['center_agent'] = args.center_agent
+    if args.host_name is not None:
+        data['host_name'] = args.host_name.strip()
+    if args.galaxy is not None:
+        label, separator, path = args.galaxy.partition('=')
+        if not separator or not label.strip() or not path.strip():
+            parser.error('--galaxy must be LABEL=PATH')
+        data['galaxy'] = {'label': label.strip(), 'path': str(Path(path).expanduser().resolve())}
     if args.agents is not None:
         data['agents'] = args.agents
     if args.alias:

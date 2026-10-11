@@ -1,4 +1,4 @@
-import {hitTest, layoutScene} from '../gnome-extension/galaxy.js';
+import {advancePhase, hitTest, layoutScene} from '../gnome-extension/galaxy.js';
 
 const scene = {
     nodes: [
@@ -39,4 +39,24 @@ for (const key of ['dir:App', 'file:main']) {
     if (distance(beforeWrap.positions.get(key), afterWrap.positions.get(key)) > 0.01)
         throw new Error(`${key} jumped when the rotation phase wrapped`);
 }
+const hostScene = {
+    nodes: [
+        {id: 'host', kind: 'Host', name: 'Machine', path: '/galaxy', x: 0, y: 0, z: 0},
+        {id: 'root:Projects', orbit_parent: 'host', kind: 'Directory system', name: 'Projects', root: 'Projects', path: '/galaxy/projects', x: 4, y: 0, z: 0},
+        {id: 'agent:worker', orbit_parent: 'host', kind: 'Agent', name: 'Worker', root: '', path: '', x: 1, y: 0, z: 0},
+        {id: 'file:main', orbit_parent: 'root:Projects', kind: 'Remembered file', name: 'main.py', root: 'Projects', path: '/galaxy/projects/main.py', x: 4.5, y: 0, z: 0},
+    ],
+    links: [{from: 2, to: 3}],
+};
+const start = layoutScene(hostScene, 0, 1200, 800, true);
+const phase = advancePhase(0, 1, 90);
+const moved = layoutScene(hostScene, phase, 1200, 800, true);
+if (Math.abs(phase - 1.5 * Math.PI) > 0.0001) throw new Error('Galaxy did not turn counterclockwise');
+if (moved.coordinates[1][1] >= start.coordinates[1][1]) throw new Error('Solar system did not move counterclockwise on screen');
+if (distance(start.positions.get('host'), moved.positions.get('host')) > 0.0001)
+    throw new Error('Host drifted from the center');
+if (distance(start.positions.get('agent:worker'), moved.positions.get('agent:worker')) < 0.1)
+    throw new Error('Agent did not roam around the host');
+if (hitTest(hostScene, start.coordinates, start.visible, ...start.coordinates[0])?.kind !== 'Host')
+    throw new Error('Central galaxy directory cannot be selected');
 print('focus layout checks passed');

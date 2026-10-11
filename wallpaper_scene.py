@@ -49,6 +49,9 @@ def make_scene() -> dict:
         "schema": "factory-observatory-wallpaper/v1",
         "generated_at": int(time.time()),
         "source": "configured-reviewed-memory",
+        "galaxy": ({"label": CONFIG["galaxy"]["label"],
+                    "path": str(Path(CONFIG["galaxy"]["path"]).expanduser())}
+                   if CONFIG.get("galaxy") else {}),
         "memory_source": {
             "provider": CONFIG["memory"]["provider"],
             "cli": str(Path(CONFIG["memory"].get("cli", "")).expanduser()) if CONFIG["memory"].get("cli") else "",
