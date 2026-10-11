@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 from pathlib import Path
 
 CONFIG_PATH = Path(os.environ.get('CONSTELLATION_CONFIG', Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'constellation' / 'sources.json'))
@@ -29,7 +30,17 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
         if entry['label'] in labels or not Path(entry['path']).expanduser().is_absolute():
             raise ValueError('Root labels must be unique and paths absolute')
         labels.add(entry['label'])
-    data.setdefault('center_agent', '')
+    data.setdefault('host_name', socket.gethostname())
+    if not isinstance(data['host_name'], str) or not data['host_name'].strip() or len(data['host_name']) > 80:
+        raise ValueError('host_name must be 1 to 80 characters')
+    galaxy = data.get('galaxy')
+    if galaxy is not None and (not isinstance(galaxy, dict) or
+            not isinstance(galaxy.get('label'), str) or not galaxy['label'].strip() or
+            not isinstance(galaxy.get('path'), str) or not Path(galaxy['path']).expanduser().is_absolute()):
+        raise ValueError('galaxy needs a nonempty label and absolute directory path')
+    if galaxy and any(Path(entry['path']).expanduser() == Path(galaxy['path']).expanduser() for entry in roots):
+        raise ValueError('Choose child directories as solar-system roots instead of repeating the galaxy path')
+    data.setdefault('center_agent', '')  # accepted for older configurations; no agent is fixed at center
     data.setdefault('agents', [])
     aliases = data.setdefault('agent_aliases', {})
     fallback = data.setdefault('unlisted_agent', '')

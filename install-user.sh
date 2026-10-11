@@ -64,6 +64,9 @@ gnome-extensions install --force "$extension_zip"
 if gnome-extensions info factory-observatory@progretech.com >/dev/null 2>&1; then
   gnome-extensions enable factory-observatory@progretech.com
   printf 'Constellation installed and enabled. Open it from the application menu.\n'
+  if [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
+    printf 'Log out and back in to load new or updated GNOME extension code on Wayland.\n'
+  fi
 else
   python3 - <<'PY'
 from gi.repository import Gio
