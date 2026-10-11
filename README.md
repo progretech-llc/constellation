@@ -36,6 +36,8 @@ On an exposed part of the desktop, **click a solar system or remembered director
 
 **Alt-click a solar system or remembered directory** to focus and enlarge its remembered files, subfolders and connected agents. Alt-click the same node or an empty part of the sky to return to the full map. Folder and memory actions are available only where the desktop is visible; they do not intercept clicks through application windows.
 
+A small lower-right legend keeps these shortcuts, the remembered-file count, and the ProgreTech credit together on the wallpaper. The MemPalace shortcut appears only when MemPalace is the configured source.
+
 Subfolders orbit their nearest visible parent folder (or their solar system), and remembered files orbit their containing folder. These local orbits continue in the focused view, where the selected folder stays centered.
 
 ## Point it at your memory and solar systems

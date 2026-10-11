@@ -229,28 +229,51 @@ function paintForeground(cr, width, height, image) {
     cr.restore();
 }
 
-function attribution(cr, width, height) {
+function attribution(cr, width, height, scene) {
     const title = 'CONSTELLATION BY PROGRETECH';
     const notice = '© 2026 PROGRETECH LLC';
+    const stale = scene && (!Number.isFinite(scene.generated_at) || Date.now() / 1000 - scene.generated_at > 360);
+    const count = `${scene?.counts?.files ?? 0} REMEMBERED FILES${stale ? '  ·  MEMORY STALE' : ''}`;
+    const shortcuts = [
+        'CLICK FOLDER · OPEN     ALT+CLICK · FOCUS/RESET',
+        'CTRL+HOVER FILE · TARGET     CTRL+CLICK · OPEN',
+    ];
+    if (scene?.memory_source?.provider === 'mempalace')
+        shortcuts.push('CTRL+SHIFT+CLICK FILE · NEWEST MEMORY');
+    const rows = [
+        ...shortcuts.map(text => ({text, size: 8.5, bold: false, alpha: 0.82, gap: 0})),
+        {text: count, size: 9, bold: false, alpha: 0.76, gap: 5},
+        {text: title, size: 11, bold: true, alpha: 0.97, gap: 2},
+        {text: notice, size: 9, bold: true, alpha: 0.9, gap: 0},
+    ];
     cr.save();
-    cr.selectFontFace('Sans', Cairo.FontSlant.NORMAL, Cairo.FontWeight.BOLD);
-    cr.setFontSize(11);
-    const titleWidth = cr.textExtents(title).width;
-    cr.setFontSize(9);
-    const noticeWidth = cr.textExtents(notice).width;
-    const boxWidth = Math.max(titleWidth, noticeWidth) + 24;
-    const left = Math.max(8, width - boxWidth - 14);
-    const top = Math.max(8, height - 57);
+    let widest = 0;
+    let baseline = 8;
+    for (const row of rows) {
+        cr.selectFontFace('Sans', Cairo.FontSlant.NORMAL,
+            row.bold ? Cairo.FontWeight.BOLD : Cairo.FontWeight.NORMAL);
+        cr.setFontSize(row.size);
+        widest = Math.max(widest, cr.textExtents(row.text).width);
+        baseline += row.gap + row.size + 4;
+        row.baseline = baseline;
+    }
+    const boxWidth = Math.min(width - 16, widest + 24);
+    const boxHeight = baseline + 9;
+    // Leave the usual right-hand desktop icon column uncovered on wide monitors.
+    const rightInset = width >= 1600 ? 140 : 14;
+    const left = Math.max(8, width - boxWidth - rightInset);
+    const top = Math.max(8, height - boxHeight - 14);
     cr.setSourceRGBA(0.018, 0.027, 0.049, 0.78);
-    cr.rectangle(left, top, boxWidth, 43);
+    cr.rectangle(left, top, boxWidth, boxHeight);
     cr.fill();
-    cr.setSourceRGBA(0.85, 0.93, 1, 0.96);
-    cr.setFontSize(11);
-    cr.moveTo(left + boxWidth - titleWidth - 12, top + 18);
-    cr.showText(title);
-    cr.setFontSize(9);
-    cr.moveTo(left + boxWidth - noticeWidth - 12, top + 33);
-    cr.showText(notice);
+    for (const row of rows) {
+        cr.selectFontFace('Sans', Cairo.FontSlant.NORMAL,
+            row.bold ? Cairo.FontWeight.BOLD : Cairo.FontWeight.NORMAL);
+        cr.setFontSize(row.size);
+        cr.setSourceRGBA(0.85, 0.93, 1, row.alpha);
+        cr.moveTo(left + boxWidth - cr.textExtents(row.text).width - 12, top + row.baseline);
+        cr.showText(row.text);
+    }
     cr.restore();
 }
 
@@ -262,7 +285,7 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
     if (!scene || !Array.isArray(scene.nodes)) {
         if (skyMode) paintForeground(cr, width, height, foreground);
         label(cr, width * 0.5, height - 24, 'MEMORY SCENE UNAVAILABLE', '#ed9a92', 10);
-        attribution(cr, width, height);
+        attribution(cr, width, height, null);
         return;
     }
     const {coordinates, visible} = layoutScene(scene, phase, width, height, skyMode, focus);
@@ -312,12 +335,5 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
     if (skyMode) paintForeground(cr, width, height, foreground);
     if (focus) label(cr, Math.min(width * 0.47, 410), 44,
         `FOCUS: ${focus.name.toUpperCase()}  ·  ALT+CLICK AGAIN TO RESET`, '#c7dcf4', 10);
-    const counts = scene.counts ?? {};
-    source(cr, '#a0b9cc', 0.59);
-    cr.selectFontFace('Sans', Cairo.FontSlant.NORMAL, Cairo.FontWeight.NORMAL);
-    cr.setFontSize(10);
-    cr.moveTo(18, height - 23);
-    const stale = !Number.isFinite(scene.generated_at) || Date.now() / 1000 - scene.generated_at > 360;
-    cr.showText(`${counts.files ?? 0} REMEMBERED FILES${stale ? '  ·  MEMORY STALE' : ''}`);
-    attribution(cr, width, height);
+    attribution(cr, width, height, scene);
 }
