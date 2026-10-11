@@ -1,28 +1,25 @@
-# Factory Observatory
+# Constellation by ProgreTech
 
-A GNOME 50/Wayland wallpaper and local inspection app for ProgreTech's **reviewed
-shared MemPalace activity**. The desktop background is a procedurally drawn,
-automatically rotating galaxy: directory systems form large lights, remembered
-files become orbiting points, active agents sit near the center, and pulses travel
-along recent agent-to-file links. Star dust, nebula glow, and simulated light rays
-provide the galaxy appearance. The interactive Bokeh map remains available for
-hovering and inspecting paths.
+A GNOME 50/Wayland animated wallpaper of Progre watching the factory's memory
+constellation. The city, rooftop, low clouds, and Progre are a stationary
+foreground; the star field and cluster graph rotate automatically in the open sky.
+Directory systems appear as large lights, remembered files as stars, and moving
+pulses connect agents to recent files named in shared MemPalace activity. Nebula
+glow, spiral dust, and simulated rays give the map its galaxy character. The
+existing Bokeh view remains available for hovering and inspecting paths.
 
-The scene reads MemPalace with the `codex` identity through its supported CLI. It
-uses shared ProgreTech structured activities and does not read another role's
-private memory or database directly. Only existing files explicitly named in
-reviewed technical steps or evidence can appear; there is no workstation-wide
-scan. Action colors are inferred from wording, so they are approximate remembered
-actions rather than verified file events. Newest `list` records take priority;
-older `search` results are relevance-ranked, not a precise timeline. Agents with
-no usable file references remain unlinked. Current file roots are Rend,
-PycharmProjects, Pictures, and selected PT_CONTEXT folders. Hidden, missing, and
-credential-like paths are excluded.
+The scene uses MemPalace's supported CLI as `codex` and reads shared reviewed
+ProgreTech activities. It does not scan the whole workstation or read another
+role's private memory. Only existing allowlisted files explicitly named in
+reviewed technical steps or evidence can appear. Action colors are inferred from
+wording, not verified filesystem events. Newest list records take priority;
+older search results are relevance-ranked. Missing, hidden, and credential-like
+paths are excluded. Git and task ledgers remain authoritative.
 
 ## Install on Ubuntu GNOME 50
 
-Python 3.10+, GNOME Shell 50, GJS, GTK 4 Python bindings, and a user systemd
-session are required. In the repository:
+Python 3.10+, GJS, GTK 4 Python bindings, GNOME Shell 50, and a user systemd
+session are required. In this repository:
 
 ```sh
 python3 -m venv .venv
@@ -30,51 +27,48 @@ python3 -m venv .venv
 ./install-user.sh
 ```
 
-The installer creates a **Factory Observatory** menu entry that opens the native
-GTK controls, installs a user GNOME Shell extension in the background layer, and
-enables a user timer that refreshes the memory scene every two minutes. The
-wallpaper starts rotating automatically once the extension is active. On a first
-install into an already running GNOME Wayland session, the extension may become
-active only after logging out and back in; the installer marks it enabled for
-that next login. The controls offer pause, rotation
-speed, nebula glow, rays, star density, link trails, labels, a manual memory
-refresh, and an **Open interactive map** button. The shell extension watches the
-local settings/scene files; no browser needs to remain open. It leaves GNOME's
-static wallpaper setting alone.
+The installer copies the local Progre foreground into the current user's data
+directory, adds **Constellation by ProgreTech** to the application menu, installs
+the GNOME background extension, and enables a user timer that refreshes the memory
+scene every two minutes. On first installation into an already-running GNOME
+Wayland session, log out and back in for Shell to discover the new extension.
+The static GNOME wallpaper setting is left unchanged.
 
-To inspect the local units and extension:
+The native controls offer automatic-rotation speed, pause, foreground visibility,
+nebula glow, rays, star density, link trails, labels, manual memory refresh, and
+an **Open interactive map** button. The browser does not need to stay open. The
+renderer labels missing or stale memory scenes instead of presenting them as
+current. Disable the wallpaper in controls or with
+`gnome-extensions disable factory-observatory@progretech.com`.
+
+Check the installed services and extension with:
 
 ```sh
 systemctl --user status factory-observatory-scene.timer
-systemctl --user status factory-observatory-scene.service
 gnome-extensions info factory-observatory@progretech.com
 ```
 
-The extension and scene files are local to the current user. Disable the
-wallpaper in the controls or use
-`gnome-extensions disable factory-observatory@progretech.com`. The renderer marks
-missing or stale memory scenes rather than presenting them as live. Its use of
-GNOME Shell's background group is an integration point to revalidate after a
-Shell upgrade.
+## Interactive map and renderer preview
 
-## Interactive map and preview
+The Bokeh map can also be opened with `.venv/bin/python app.py --serve`, bound to
+`127.0.0.1:8765`. A self-contained snapshot uses `.venv/bin/python app.py
+--no-open`. The earlier synthetic layout study remains in `demo_app.py`.
 
-The Bokeh view can also be opened directly with `.venv/bin/python app.py --serve`.
-It binds to `127.0.0.1:8765`; `--no-open` avoids opening a browser. A standalone
-snapshot is generated with `.venv/bin/python app.py --no-open`. The earlier
-synthetic layout study remains in `demo_app.py`.
-
-The desktop renderer's exact Cairo scene can be exported for review:
+To render the exact Cairo composition for review:
 
 ```sh
 .venv/bin/python wallpaper_scene.py
-gjs -m gnome-extension/render-preview.js ~/.local/state/factory-observatory/scene.json /tmp/factory-galaxy.png 1920 1080
+gjs -m gnome-extension/render-preview.js ~/.local/state/factory-observatory/scene.json /tmp/constellation.png 1920 1080 assets/progre-foreground.png
 ```
 
-The GNOME renderer is intentionally noninteractive so desktop icons and windows
-remain usable. Use the Bokeh map for per-file details. MemPalace is advisory;
-Git and factory task records remain authorities for code and task state. Remote
-storage connectors and file-operation verification are not implemented.
+The GNOME layer is noninteractive so desktop icons and windows remain usable. The
+Shell background group is an internal integration point to revalidate after a
+Shell upgrade. Remote storage connectors and file-operation verification are not
+implemented.
 
-This repository remains a private prototype. An open-source license and public
-release have not been selected.
+The original scene was supplied by Edwin at
+`/home/edwin/Pictures/Wallpapers/ChatGPT Image Sep 25, 2026, 12_52_06 PM.png`.
+`assets/progre-foreground.png` is its edited, transparent-sky derivative, used
+locally for this prototype. The source image remains untouched. Review visual
+asset distribution rights before any public release. This repository is private;
+an open-source license has not been selected.

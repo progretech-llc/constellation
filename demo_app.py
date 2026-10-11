@@ -343,7 +343,7 @@ def main() -> None:
         if(toggle.active) window.__factoryObservatoryTimer=window.setInterval(advance,1500);
     """.replace("__EVENT_BODY__", event_code).replace("__EVENTS__", json.dumps(demo_events)).replace("__RESOURCES__", json.dumps(RESOURCES)).replace("__AGENTS__", json.dumps(AGENTS))))
 
-    toolbar = Div(text="<span class='brand-mark'>●</span>&nbsp;&nbsp;<span class='brand'>FACTORY OBSERVATORY</span>&nbsp;&nbsp; <span class='subtitle'>LOCAL WORKBENCH MAP</span><span class='toolbar-spacer'></span><span class='privacy'>LOCAL DEMO · NO CONNECTORS</span>", css_classes=["toolbar"])
+    toolbar = Div(text="<span class='brand-mark'>●</span>&nbsp;&nbsp;<span class='brand'>CONSTELLATION BY PROGRETECH</span>&nbsp;&nbsp; <span class='subtitle'>LOCAL WORKBENCH MAP</span><span class='toolbar-spacer'></span><span class='privacy'>LOCAL DEMO · NO CONNECTORS</span>", css_classes=["toolbar"])
     footnote = Div(text="<span class='key-dot' style='color:#f4a261'>●</span> Orchestrator &nbsp; <span class='key-dot' style='color:#77a9ff'>●</span> Logical agents &nbsp; <span class='key-dot' style='color:#62dbc3'>●</span> Resource clusters &nbsp; <span class='line-key'>━</span> Illustrative relationship &nbsp; <span class='trail-key'>━</span> Sample transfer", css_classes=["legend"])
     from bokeh.layouts import column, row
     control_row = row(layout_select, angle_slider, animate, next_event, sizing_mode="stretch_width", css_classes=["control-row"])
@@ -384,7 +384,7 @@ def main() -> None:
     .bk-tooltip { background:#101923 !important; color:#d7e0e8 !important; }
     """
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    html = file_html(page, INLINE, "Factory Observatory · Demo", template=Template("""<!DOCTYPE html>
+    html = file_html(page, INLINE, "Constellation by ProgreTech · Demo", template=Template("""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title>{{ bokeh_css }}<style>{{ css }}</style>{{ bokeh_js }}</head><body>{{ plot_div }}{{ plot_script }}</body></html>"""), template_variables={"css": css})
     OUTPUT.write_text(html)
     print(f"Wrote {OUTPUT}")

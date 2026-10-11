@@ -199,7 +199,7 @@ def _page_html(*, refresh_seconds: int | None = None) -> tuple[str, int, int, in
         links.change.emit();
     """))
 
-    title = Div(text="<span class='mark'>◉</span> &nbsp; FACTORY OBSERVATORY <span class='subtitle'> / SHARED MEMORY</span> <span class='right'>LOCAL · MEMORY SNAPSHOT</span>", height=28)
+    title = Div(text="<span class='mark'>◉</span> &nbsp; CONSTELLATION BY PROGRETECH <span class='subtitle'> / SHARED MEMORY</span> <span class='right'>LOCAL · MEMORY SNAPSHOT</span>", height=28)
     scanned = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
     summary = Div(text=(f"{len(files)} remembered files &nbsp;·&nbsp; {len({item.directory for item in files})} directories &nbsp;·&nbsp; "
                         f"{len(active_agents)} agents with file references &nbsp;·&nbsp; {len(activities)} reviewed activity records &nbsp;·&nbsp; refreshed {html.escape(scanned)}"),
@@ -234,7 +234,7 @@ def _page_html(*, refresh_seconds: int | None = None) -> tuple[str, int, int, in
     """
     refresh_tag = f'<meta http-equiv="refresh" content="{refresh_seconds}">' if refresh_seconds else ""
     template = Template("""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title>{{ refresh_tag }}{{ bokeh_css }}<style>{{ css }}</style>{{ bokeh_js }}</head><body>{{ plot_div }}{{ plot_script }}</body></html>""")
-    document = file_html(page, INLINE, "Factory Observatory · shared memory", template=template,
+    document = file_html(page, INLINE, "Constellation by ProgreTech · shared memory", template=template,
                          template_variables={"css": css, "refresh_tag": refresh_tag})
     return document, len(files), len({item.directory for item in files}), len(active_agents)
 

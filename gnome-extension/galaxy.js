@@ -4,6 +4,7 @@ import Cairo from 'cairo';
 export const DEFAULT_SETTINGS = Object.freeze({
     enabled: true,
     paused: false,
+    foreground: true,
     rotation_speed: 0.85,
     glow: 0.82,
     rays: 0.72,
@@ -57,22 +58,24 @@ function line(cr, x1, y1, x2, y2, hex, alpha, width) {
     cr.stroke();
 }
 
-function project(x, y, z, phase, width, height) {
-    const scale = Math.min(width / 15.4, height / 11.8);
+function project(x, y, z, phase, width, height, skyMode) {
+    const scale = skyMode ? Math.min(width / 16.9, height / 12.2) : Math.min(width / 15.4, height / 11.8);
     const ca = Math.cos(phase), sa = Math.sin(phase);
     const rx = x * ca - y * sa;
     const ry = x * sa + y * ca;
-    return [width * 0.5 + rx * scale, height * 0.5 + ry * scale * 0.77 + z * scale * 0.16];
+    return [width * (skyMode ? 0.47 : 0.5) + rx * scale,
+        height * (skyMode ? 0.265 : 0.5) + ry * scale * (skyMode ? 0.43 : 0.77) + z * scale * 0.11];
 }
 
-function background(cr, width, height, settings) {
+function background(cr, width, height, settings, skyMode) {
     cr.setSourceRGB(0.018, 0.027, 0.049);
     cr.paint();
     const g = Number(settings.glow ?? DEFAULT_SETTINGS.glow);
-    glow(cr, width * 0.49, height * 0.49, Math.min(width * 0.42, height * 0.77), '#274e9d', 0.48 * g);
-    glow(cr, width * 0.64, height * 0.35, Math.min(width * 0.28, height * 0.50), '#8840bd', 0.28 * g);
-    glow(cr, width * 0.29, height * 0.66, Math.min(width * 0.25, height * 0.48), '#167da3', 0.29 * g);
-    glow(cr, width * 0.50, height * 0.50, Math.min(width * 0.12, height * 0.22), '#f3a6a4', 0.30 * g);
+    const centerY = height * (skyMode ? 0.265 : 0.5);
+    glow(cr, width * 0.47, centerY, Math.min(width * 0.42, height * 0.77), '#274e9d', 0.48 * g);
+    glow(cr, width * 0.62, centerY - height * 0.12, Math.min(width * 0.28, height * 0.50), '#8840bd', 0.28 * g);
+    glow(cr, width * 0.27, centerY + height * 0.12, Math.min(width * 0.25, height * 0.48), '#167da3', 0.29 * g);
+    glow(cr, width * 0.47, centerY, Math.min(width * 0.12, height * 0.22), '#f3a6a4', 0.30 * g);
     const rng = random(0x4f425356);
     const count = Math.min(200, Math.max(40, Math.round(width * height / 9500)));
     for (let i = 0; i < count; i++) {
@@ -81,7 +84,7 @@ function background(cr, width, height, settings) {
     }
 }
 
-function spiralDust(cr, phase, width, height, settings) {
+function spiralDust(cr, phase, width, height, settings, skyMode) {
     const count = Math.round(1200 * Number(settings.density ?? DEFAULT_SETTINGS.density));
     const rng = random(0xa17ce509);
     for (let i = 0; i < count; i++) {
@@ -90,7 +93,7 @@ function spiralDust(cr, phase, width, height, settings) {
         const theta = arm * TAU / 4 + radius * 0.60 + (rng() - 0.5) * (0.35 + radius * 0.07);
         const x = radius * Math.cos(theta) + (rng() - 0.5) * 0.14;
         const y = radius * Math.sin(theta) + (rng() - 0.5) * 0.14;
-        const [px, py] = project(x, y, (rng() - 0.5) * 0.9, phase, width, height);
+        const [px, py] = project(x, y, (rng() - 0.5) * 0.9, phase, width, height, skyMode);
         const palette = ['#8faeff', '#cba4ff', '#77d7e5', '#e8a6bf'];
         const alpha = 0.17 + rng() * 0.54;
         circle(cr, px, py, rng() > 0.96 ? 1.75 : 0.65 + rng() * 0.75, palette[arm], alpha);
@@ -103,7 +106,7 @@ function spiralDust(cr, phase, width, height, settings) {
             for (let step = 0; step <= 65; step++) {
                 const r = 0.26 + step / 65 * 5.6;
                 const theta = arm * TAU / 4 + r * 0.60 + (pass ? 0.10 : -0.10);
-                const [px, py] = project(r * Math.cos(theta), r * Math.sin(theta), 0, phase, width, height);
+                const [px, py] = project(r * Math.cos(theta), r * Math.sin(theta), 0, phase, width, height, skyMode);
                 if (step === 0) cr.moveTo(px, py);
                 else cr.lineTo(px, py);
             }
@@ -114,15 +117,15 @@ function spiralDust(cr, phase, width, height, settings) {
     }
 }
 
-function lightRays(cr, phase, width, height, settings) {
+function lightRays(cr, phase, width, height, settings, skyMode) {
     const strength = Number(settings.rays ?? DEFAULT_SETTINGS.rays);
     if (strength <= 0) return;
-    const cx = width * 0.5, cy = height * 0.5;
+    const cx = width * (skyMode ? 0.47 : 0.5), cy = height * (skyMode ? 0.265 : 0.5);
     for (let index = 0; index < 14; index++) {
         const angle = phase + index * TAU / 14 + Math.sin(index * 13.1) * 0.18;
         const reach = Math.min(width * 0.43, height * 0.77) * (0.65 + ((index * 7) % 5) * 0.08);
         const x = cx + Math.cos(angle) * reach;
-        const y = cy + Math.sin(angle) * reach * 0.77;
+        const y = cy + Math.sin(angle) * reach * (skyMode ? 0.43 : 0.77);
         const gradient = new Cairo.LinearGradient(cx, cy, x, y);
         const tint = color(index % 3 === 0 ? '#f0afca' : '#6bbde8');
         gradient.addColorStopRGBA(0, ...tint, 0.22 * strength);
@@ -145,15 +148,29 @@ function label(cr, x, y, text, hex, size = 11) {
     cr.showText(text);
 }
 
-export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTINGS, phase = 0, time = 0) {
-    background(cr, width, height, settings);
-    spiralDust(cr, phase, width, height, settings);
-    lightRays(cr, phase, width, height, settings);
+function paintForeground(cr, width, height, image) {
+    if (!image) return;
+    const imageWidth = image.getWidth(), imageHeight = image.getHeight();
+    const scale = Math.max(width / imageWidth, height / imageHeight);
+    cr.save();
+    cr.translate((width - imageWidth * scale) / 2, (height - imageHeight * scale) / 2);
+    cr.scale(scale, scale);
+    cr.setSourceSurface(image, 0, 0);
+    cr.paint();
+    cr.restore();
+}
+
+export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTINGS, phase = 0, time = 0, foreground = null) {
+    const skyMode = settings.foreground !== false && foreground !== null;
+    background(cr, width, height, settings, skyMode);
+    spiralDust(cr, phase, width, height, settings, skyMode);
+    lightRays(cr, phase, width, height, settings, skyMode);
     if (!scene || !Array.isArray(scene.nodes)) {
+        if (skyMode) paintForeground(cr, width, height, foreground);
         label(cr, width * 0.5, height - 24, 'MEMORY SCENE UNAVAILABLE', '#ed9a92', 10);
         return;
     }
-    const coordinates = scene.nodes.map(node => project(node.x, node.y, node.z, phase, width, height));
+    const coordinates = scene.nodes.map(node => project(node.x, node.y, node.z, phase, width, height, skyMode));
     const intensity = Number(settings.glow ?? DEFAULT_SETTINGS.glow);
     if (settings.links !== false && Array.isArray(scene.links)) {
         for (let i = 0; i < scene.links.length; i++) {
@@ -196,11 +213,12 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
             circle(cr, x, y, 1.1 + Math.max(0, node.z + 1) * 0.30, node.color, flicker);
         }
     }
+    if (skyMode) paintForeground(cr, width, height, foreground);
     const counts = scene.counts ?? {};
     source(cr, '#a0b9cc', 0.59);
     cr.selectFontFace('Sans', Cairo.FontSlant.NORMAL, Cairo.FontWeight.NORMAL);
     cr.setFontSize(10);
-    cr.moveTo(Math.max(18, width - 305), height - 23);
+    cr.moveTo(Math.max(18, width - 410), height - 23);
     const stale = !Number.isFinite(scene.generated_at) || Date.now() / 1000 - scene.generated_at > 360;
-    cr.showText(`FACTORY OBSERVATORY  ·  ${counts.files ?? 0} REMEMBERED FILES${stale ? '  ·  MEMORY STALE' : ''}`);
+    cr.showText(`CONSTELLATION BY PROGRETECH  ·  ${counts.files ?? 0} REMEMBERED FILES${stale ? '  ·  MEMORY STALE' : ''}`);
 }

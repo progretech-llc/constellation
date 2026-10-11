@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native GTK controls for the GNOME Factory Observatory wallpaper."""
+"""Native GTK controls for the Constellation by ProgreTech wallpaper."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ SCENE_PATH = STATE_HOME / "factory-observatory" / "scene.json"
 DEFAULT = {
     "enabled": True,
     "paused": False,
+    "foreground": True,
     "rotation_speed": 0.85,
     "glow": 0.82,
     "rays": 0.72,
@@ -54,14 +55,14 @@ def save_settings(values: dict) -> None:
 
 class ControlWindow(Gtk.ApplicationWindow):
     def __init__(self, app: Gtk.Application):
-        super().__init__(application=app, title="Factory Observatory")
-        self.set_default_size(530, 610)
+        super().__init__(application=app, title="Constellation by ProgreTech")
+        self.set_default_size(530, 690)
         self.values = settings()
         self._loading = True
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.set_child(outer)
         header = Gtk.HeaderBar()
-        header.set_title_widget(Gtk.Label(label="Factory Observatory"))
+        header.set_title_widget(Gtk.Label(label="Constellation by ProgreTech"))
         outer.append(header)
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         content.set_margin_start(28)
@@ -70,10 +71,10 @@ class ControlWindow(Gtk.ApplicationWindow):
         content.set_margin_bottom(24)
         outer.append(content)
 
-        intro = Gtk.Label(label="A living map of shared factory memory", xalign=0)
+        intro = Gtk.Label(label="Progre watches the factory constellation", xalign=0)
         intro.add_css_class("title-2")
         content.append(intro)
-        detail = Gtk.Label(label="The wallpaper rotates automatically behind desktop icons. Only files named in reviewed activity become visible nodes.", xalign=0, wrap=True)
+        detail = Gtk.Label(label="Progre and the city frame an animated sky. Only files named in reviewed activity become constellation nodes.", xalign=0, wrap=True)
         detail.add_css_class("dim-label")
         content.append(detail)
         self.status = Gtk.Label(xalign=0, wrap=True)
@@ -82,6 +83,7 @@ class ControlWindow(Gtk.ApplicationWindow):
         self._refresh_status()
 
         self._switch(content, "Show wallpaper", "enabled")
+        self._switch(content, "Show Progre and city foreground", "foreground")
         self._switch(content, "Pause rotation", "paused")
         self._scale(content, "Rotation · degrees per second", "rotation_speed", 0, 5, 2)
         self._scale(content, "Nebula glow", "glow", 0, 1, 2)
@@ -152,7 +154,7 @@ class ControlWindow(Gtk.ApplicationWindow):
 
 class ControlApp(Gtk.Application):
     def __init__(self):
-        super().__init__(application_id="com.progretech.FactoryObservatory")
+        super().__init__(application_id="com.progretech.Constellation")
 
     def do_activate(self):
         window = self.props.active_window or ControlWindow(self)

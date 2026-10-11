@@ -1,3 +1,4 @@
+import Cairo from 'cairo';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -6,6 +7,7 @@ import {DEFAULT_SETTINGS, renderGalaxy} from './galaxy.js';
 
 const SCENE_PATH = GLib.build_filenamev([GLib.get_user_state_dir(), 'factory-observatory', 'scene.json']);
 const CONFIG_PATH = GLib.build_filenamev([GLib.get_user_config_dir(), 'factory-observatory', 'wallpaper.json']);
+const FOREGROUND_PATH = GLib.build_filenamev([GLib.get_user_data_dir(), 'constellation', 'progre-foreground.png']);
 
 function readJson(path) {
     const [ok, bytes] = GLib.file_get_contents(path);
@@ -16,6 +18,7 @@ function readJson(path) {
 export default class FactoryObservatoryWallpaper extends Extension {
     enable() {
         this._scene = null;
+        this._foreground = null;
         this._settings = {...DEFAULT_SETTINGS};
         this._areas = [];
         this._phase = 0.22;
@@ -52,6 +55,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
         for (const area of this._areas ?? []) area.destroy();
         this._areas = [];
         this._scene = null;
+        this._foreground = null;
     }
 
     _reload() {
@@ -61,6 +65,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
             this._settings = {
                 enabled: raw.enabled !== false,
                 paused: raw.paused === true,
+                foreground: raw.foreground !== false,
                 rotation_speed: Number.isFinite(speed) ? Math.max(0, Math.min(5, speed)) : DEFAULT_SETTINGS.rotation_speed,
                 glow: this._clamp(raw.glow, DEFAULT_SETTINGS.glow),
                 rays: this._clamp(raw.rays, DEFAULT_SETTINGS.rays),
@@ -77,6 +82,13 @@ export default class FactoryObservatoryWallpaper extends Extension {
                 this._scene = scene;
         } catch (_error) {
             this._scene = null;
+        }
+        if (!this._foreground) {
+            try {
+                this._foreground = Cairo.ImageSurface.createFromPNG(FOREGROUND_PATH);
+            } catch (_error) {
+                this._foreground = null;
+            }
         }
         for (const area of this._areas ?? []) {
             area.visible = this._settings.enabled;
@@ -101,7 +113,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
             area.connect('repaint', actor => {
                 const cr = actor.get_context();
                 try {
-                    renderGalaxy(cr, actor.width, actor.height, this._scene, this._settings, this._phase, this._motionTime);
+                    renderGalaxy(cr, actor.width, actor.height, this._scene, this._settings, this._phase, this._motionTime, this._foreground);
                 } finally {
                     cr.$dispose();
                 }
