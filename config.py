@@ -24,12 +24,27 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
     if not isinstance(roots, list) or not 1 <= len(roots) <= 12:
         raise ValueError('Configure 1 to 12 directory roots')
     labels = set()
+    mempalace_roots = 0
     for entry in roots:
         if not isinstance(entry, dict) or not isinstance(entry.get('label'), str) or not entry.get('path'):
             raise ValueError('Each root needs label and path')
         if entry['label'] in labels or not Path(entry['path']).expanduser().is_absolute():
             raise ValueError('Root labels must be unique and paths absolute')
         labels.add(entry['label'])
+        root_type = entry.get('type', 'directory')
+        if root_type not in {'directory', 'mempalace'}:
+            raise ValueError('Root type must be directory or mempalace')
+        if root_type == 'mempalace':
+            mempalace_roots += 1
+            if memory['provider'] != 'mempalace':
+                raise ValueError('A MemPalace solar system requires a MemPalace memory source')
+            from mempalace_planets import validate_directory
+            validate_directory(entry['path'])
+            count = entry.setdefault('max_memories', 20)
+            if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 100:
+                raise ValueError('max_memories must be an integer from 1 to 100')
+    if mempalace_roots > 1:
+        raise ValueError('Configure at most one MemPalace solar system')
     data.setdefault('host_name', socket.gethostname())
     if not isinstance(data['host_name'], str) or not data['host_name'].strip() or len(data['host_name']) > 80:
         raise ValueError('host_name must be 1 to 80 characters')

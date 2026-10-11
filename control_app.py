@@ -14,6 +14,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk  # noqa: E402
+from config import CONFIG_PATH as SOURCES_PATH, load_config
 
 HERE = Path(__file__).resolve().parent
 CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
@@ -56,7 +57,7 @@ def save_settings(values: dict) -> None:
 class ControlWindow(Gtk.ApplicationWindow):
     def __init__(self, app: Gtk.Application):
         super().__init__(application=app, title="Constellation by ProgreTech")
-        self.set_default_size(530, 690)
+        self.set_default_size(530, 740)
         self.values = settings()
         self._loading = True
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -91,6 +92,19 @@ class ControlWindow(Gtk.ApplicationWindow):
         self._scale(content, "Galaxy star density", "density", 0, 1, 2)
         self._switch(content, "Agent-to-file light trails", "links")
         self._switch(content, "Directory and agent labels", "labels")
+        try:
+            source = load_config()
+            memory_system = next((item for item in source['roots'] if item.get('type') == 'mempalace'), None)
+        except (OSError, ValueError, KeyError):
+            memory_system = None
+        if memory_system is not None:
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+            row.append(Gtk.Label(label="Recent MemPalace planets", xalign=0, hexpand=True))
+            planets = Gtk.SpinButton.new_with_range(1, 100, 1)
+            planets.set_value(memory_system.get('max_memories', 20))
+            planets.connect('value-changed', self._set_memory_planets)
+            row.append(planets)
+            content.append(row)
         buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         refresh = Gtk.Button(label="Refresh memory now")
         refresh.connect("clicked", self._refresh_memory)
@@ -128,12 +142,31 @@ class ControlWindow(Gtk.ApplicationWindow):
         self.values[key] = value
         save_settings(self.values)
 
+    def _set_memory_planets(self, widget: Gtk.SpinButton) -> None:
+        if self._loading:
+            return
+        try:
+            source = load_config()
+            system = next(item for item in source['roots'] if item.get('type') == 'mempalace')
+            system['max_memories'] = widget.get_value_as_int()
+            SOURCES_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile('w', dir=SOURCES_PATH.parent, prefix='.sources-', delete=False) as stream:
+                temporary = Path(stream.name)
+                os.fchmod(stream.fileno(), 0o600)
+                json.dump(source, stream, indent=2)
+                stream.write('\n')
+            os.replace(temporary, SOURCES_PATH)
+            subprocess.Popen(['systemctl', '--user', 'start', 'factory-observatory-scene.service'],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except (OSError, ValueError, StopIteration):
+            self.status.set_text('Could not update MemPalace planets; check the source configuration.')
+
     def _refresh_status(self) -> None:
         try:
             scene = json.loads(SCENE_PATH.read_text())
             age = max(0, int(time.time()) - int(scene["generated_at"]))
             counts = scene["counts"]
-            self.status.set_text(f"{counts['files']} remembered files · {counts['directories']} directories · {counts['agents']} linked agents · refreshed {age // 60} min ago")
+            self.status.set_text(f"{counts['files']} remembered files · {counts.get('memory_planets', 0)} memory planets · {counts['agents']} linked agents · refreshed {age // 60} min ago")
         except (OSError, KeyError, TypeError, ValueError):
             self.status.set_text("No valid memory scene yet. Use Refresh memory now to build one.")
 
