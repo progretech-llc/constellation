@@ -24,13 +24,18 @@ MAX_LINKS_PER_AGENT = 7
 MIN_FILES_PER_AGENT = 4
 
 ROOTS = (
-    ("MS-S1 Max", Path("/home/edwin/Rend")),
-    ("Repositories", Path("/home/edwin/PycharmProjects")),
+    ("PTINTERNAL", Path("/home/edwin/ptinternal")),
+    ("Repositories", Path("/mnt/pt-context/projects")),
     ("Pictures", Path("/home/edwin/Pictures")),
+    ("Knowledge", Path("/mnt/pt-context/knowledge")),
     ("Job artifacts", Path("/mnt/pt-context/job-artifacts")),
     ("Deliverables", Path("/mnt/pt-context/deliverables")),
 )
-ROOT_PATH_ALIASES = (("Repositories", Path("/mnt/pt-context/projects/PycharmProjects")),)
+ROOT_PATH_ALIASES = (("PTINTERNAL", Path("/home/edwin/Rend")),
+                     ("Repositories", Path("/home/edwin/PycharmProjects")))
+HOST_NAME = "MS-S1 Max"
+GALAXY_LABEL = "PT-CONTEXT"
+GALAXY_PATH = Path("/mnt/pt-context")
 DISPLAY_AGENTS = frozenset({"codex", "rend", "lyra", "mak", "progre", "imagen", "moxy"})
 
 
@@ -167,7 +172,7 @@ def _safe_file(candidate: str) -> tuple[str, str, str] | None:
         return None
     if not resolved.is_file() or any(segment in BLOCKED_SEGMENTS or segment.startswith(".") or SENSITIVE_SEGMENT.search(segment) for segment in resolved.parts):
         return None
-    if not (_root_for(resolved) or (resolved.is_relative_to(Path("/mnt/pt-context")) and root == "MS-S1 Max")):
+    if not (_root_for(resolved) or (resolved.is_relative_to(GALAXY_PATH) and root == "PTINTERNAL")):
         return None
     return str(raw_path), str(raw_path.parent), root
 

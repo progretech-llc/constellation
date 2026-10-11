@@ -6,7 +6,7 @@ import Meta from 'gi://Meta';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
-import {DEFAULT_SETTINGS, hitTest, layoutScene, renderGalaxy} from './galaxy.js';
+import {DEFAULT_SETTINGS, advancePhase, hitTest, layoutScene, renderGalaxy} from './galaxy.js';
 
 const SCENE_PATH = GLib.build_filenamev([GLib.get_user_state_dir(), 'factory-observatory', 'scene.json']);
 const CONFIG_PATH = GLib.build_filenamev([GLib.get_user_config_dir(), 'factory-observatory', 'wallpaper.json']);
@@ -45,7 +45,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
             const elapsed = Math.min(0.5, Math.max(0, (now - this._lastTick) / 1_000_000));
             this._lastTick = now;
             if (this._settings.enabled !== false && this._settings.paused !== true) {
-                this._phase = (this._phase + elapsed * this._settings.rotation_speed * Math.PI / 180) % (2 * Math.PI);
+                this._phase = advancePhase(this._phase, elapsed, this._settings.rotation_speed);
                 this._motionTime += elapsed;
                 for (const area of this._areas) area.queue_repaint();
             }
@@ -182,6 +182,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
         this._tooltip.text = `${node.name}  →  ${displayedPath}\n` +
             (node.kind === 'Remembered file' ?
                 `Ctrl+click: open folder${memory ? '   ·   Ctrl+Shift+click: newest memory' : ''}` :
+                node.kind === 'Host' ? 'Click: open galaxy folder   ·   Alt+click: reset view' :
                 'Click: open folder   ·   Alt+click: focus system');
         this._tooltip.set_position(Math.max(4, Math.min(x + 18, global.stage.width - 560)),
             Math.max(4, Math.min(y + 18, global.stage.height - 65)));
@@ -198,6 +199,11 @@ export default class FactoryObservatoryWallpaper extends Extension {
         const shift = (modifiers & Clutter.ModifierType.SHIFT_MASK) !== 0;
         const node = this._hitNode(x, y);
         if (alt) {
+            if (node?.kind === 'Host') {
+                this._focus = null;
+                for (const area of this._areas) area.queue_repaint();
+                return Clutter.EVENT_STOP;
+            }
             if (!node && this._focus && this._desktopPoint(x, y)) {
                 this._focus = null;
             } else if (node) {

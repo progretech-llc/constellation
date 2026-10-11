@@ -21,14 +21,14 @@ from bokeh.plotting import figure
 from bokeh.resources import INLINE
 from jinja2 import Template
 
-from memory_map import ROOTS, build_catalog, read_activities, recent_links
+from memory_map import ROOTS, HOST_NAME, GALAXY_PATH, build_catalog, read_activities, recent_links
 
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "build" / "factory-observatory.html"
 ROOT_COLORS = {
-    "MS-S1 Max": "#7ed6c3", "Repositories": "#6d9fff", "Pictures": "#e99e70",
-    "Job artifacts": "#a18dff", "Deliverables": "#e7c46b",
+    "PTINTERNAL": "#7ed6c3", "Repositories": "#6d9fff", "Pictures": "#e99e70",
+    "Knowledge": "#80c8e8", "Job artifacts": "#a18dff", "Deliverables": "#e7c46b",
 }
 AGENT_COLORS = {
     "codex": "#f5a86b", "rend": "#61d6c5", "lyra": "#e9ce73",
@@ -38,11 +38,10 @@ AGENT_COLORS = {
 ACTION_COLORS = {"modified": "#ffc978", "created": "#ee8cae", "accessed": "#90d8c6", "referenced": "#8396ae"}
 ACTIVE_ROLES = ("codex", "rend", "lyra", "mak", "progre", "imagen", "moxy")
 ROOT_CENTERS = {
-    "MS-S1 Max": (-5.25, 2.2, -0.4),
-    "Repositories": (0.0, 4.35, 0.8),
-    "Pictures": (5.2, 2.1, -0.6),
-    "Job artifacts": (4.7, -2.6, 0.5),
-    "Deliverables": (0.0, -4.65, -0.4),
+    label: (4.8 * math.sin(index * 2 * math.pi / len(ROOTS)),
+            4.5 * math.cos(index * 2 * math.pi / len(ROOTS)),
+            0.6 * math.sin(index * 2.4))
+    for index, (label, _) in enumerate(ROOTS)
 }
 
 
@@ -64,7 +63,7 @@ def _project(x: float, y: float, z: float, angle: float) -> tuple[float, float, 
 def _build_scene(files, active_agents):
     author_order = list(ACTIVE_ROLES)
     nodes = {key: [] for key in ("id", "orbit_parent", "x", "y", "depth", "bx", "by", "bz", "size", "color", "alpha", "name", "kind", "detail", "action", "memory", "path", "root", "memory_project")}
-    labels = {key: [] for key in ("x", "y", "bx", "by", "bz", "text", "color")}
+    labels = {key: [] for key in ("x", "y", "bx", "by", "bz", "text", "color", "kind")}
     node_index: dict[str, int] = {}
     position: dict[str, tuple[float, float, float]] = {}
 
@@ -81,11 +80,14 @@ def _build_scene(files, active_agents):
         }.items():
             nodes[column].append(value)
         if label:
-            for column, value in {"x": px, "y": py + (0.31 if kind == "Directory system" else -0.36), "bx": xyz[0], "by": xyz[1], "bz": xyz[2], "text": name, "color": color}.items():
+            for column, value in {"x": px, "y": py + (0.31 if kind == "Directory system" else -0.36), "bx": xyz[0], "by": xyz[1], "bz": xyz[2], "text": name, "color": color, "kind": kind}.items():
                 labels[column].append(value)
 
+    node("host", HOST_NAME, "Host", str(GALAXY_PATH), "center", "", (0, 0, 0),
+         18, "#f5a86b", label=True, path=str(GALAXY_PATH))
     for label, path in ROOTS:
-        node("root:" + label, label, "Directory system", str(path), "", "", ROOT_CENTERS[label], 19, ROOT_COLORS[label], label=True, path=str(path), root=label)
+        node("root:" + label, label, "Directory system", str(path), "", "", ROOT_CENTERS[label], 19,
+             ROOT_COLORS[label], label=True, path=str(path), root=label, orbit_parent="host")
 
     directories = sorted({(item.root, item.directory) for item in files},
                          key=lambda pair: (len(Path(pair[1]).parts), pair[0], pair[1]))
@@ -128,15 +130,11 @@ def _build_scene(files, active_agents):
         parent_key = "dir:" + item.directory if "dir:" + item.directory in node_index else "root:" + item.root
         node("file:" + item.path, Path(item.path).name, "Remembered file", item.path + " · agents: " + actors, action, ", ".join(item.memory_ids[:4]), xyz, 5.3, ACTION_COLORS[action], 0.78, path=item.path, root=item.root, memory_project=item.memory_projects[0] if item.memory_projects else "", orbit_parent=parent_key)
 
-    noncentral = [agent for agent in author_order if agent != "codex"]
     for index, agent in enumerate(author_order):
-        if agent == "codex":
-            xyz = (0, 0, 1.1)
-        else:
-            theta = index * 2 * math.pi / max(1, len(noncentral)) + 0.13
-            xyz = (1.72 * math.cos(theta), 1.55 * math.sin(theta), (_hash01(agent) - 0.5) * 0.8)
+        theta = index * 2 * math.pi / max(1, len(author_order)) + 0.13
+        xyz = (1.72 * math.cos(theta), 1.55 * math.sin(theta), (_hash01(agent) - 0.5) * 0.8)
         has_files = agent in active_agents
-        node("agent:" + agent, "Odexi" if agent == "codex" else agent.title(), "Agent", "Shared reviewed file references: " + str(sum(agent in item.agents for item in files)), "center" if agent == "codex" else "", "", xyz, 15 if agent == "codex" else 11.5, AGENT_COLORS.get(agent, "#aab9ce"), 0.96 if has_files else 0.42, label=agent in ACTIVE_ROLES or has_files)
+        node("agent:" + agent, "Odexi" if agent == "codex" else agent.title(), "Agent", "Shared reviewed file references: " + str(sum(agent in item.agents for item in files)), "", "", xyz, 11.5, AGENT_COLORS.get(agent, "#aab9ce"), 0.96 if has_files else 0.42, label=agent in ACTIVE_ROLES or has_files, orbit_parent="host")
 
     links = {key: [] for key in ("xs", "ys", "source_idx", "target_idx", "color", "alpha", "size")}
     for agent, file_path, action in recent_links(files, active_agents):
@@ -203,7 +201,7 @@ def _page_html(*, refresh_seconds: int | None = None) -> tuple[str, int, int, in
         nodes.change.emit();
         const l=labels.data;
         for(let i=0;i<l.x.length;i++) {
-            const p=project(l.bx[i],l.by[i],l.bz[i]);l.x[i]=p[0];l.y[i]=p[1]+(l.text[i]==='Odexi'?-0.36:0.29);
+            const p=project(l.bx[i],l.by[i],l.bz[i]);l.x[i]=p[0];l.y[i]=p[1]+(l.kind[i]==='Host'?-0.36:0.29);
         }
         labels.change.emit();
         const e=links.data;
@@ -227,7 +225,7 @@ def _page_html(*, refresh_seconds: int | None = None) -> tuple[str, int, int, in
         let frame=0;
         window.__factoryObservatoryMotion=window.setInterval(()=>{
             if(pause.active) return;
-            angle.value=angle.value>=179.5?-180:angle.value+0.5;
+            angle.value=angle.value<=-179.5?180:angle.value-0.5;
             frame++;
             const e=links.data,b={x:[],y:[],color:[],size:[]};
             for(let i=0;i<e.xs.length;i++) {

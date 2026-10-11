@@ -15,6 +15,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
 
 const TAU = Math.PI * 2;
 
+export function advancePhase(phase, elapsed, degreesPerSecond) {
+    return (phase - elapsed * degreesPerSecond * Math.PI / 180 + TAU) % TAU;
+}
+
 function random(seed) {
     let value = seed >>> 0;
     return () => {
@@ -80,7 +84,8 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null) 
             continue;
         }
         // Integer multiples keep orbits continuous when the scene phase wraps at 2π.
-        const speed = node.kind === 'Remembered file' ? 3 : 1;
+        const speed = node.kind === 'Remembered file' ? 3 :
+            node.kind === 'Directory system' ? 0 : 1;
         const angle = phase * speed;
         const dx = node.x - parent.x, dy = node.y - parent.y;
         positions.set(node.id, {
@@ -127,9 +132,9 @@ export function hitTest(scene, coordinates, visible, x, y) {
     for (let i = 0; i < scene.nodes.length; i++) {
         if (!visible.has(i)) continue;
         const node = scene.nodes[i];
-        if (!['Directory system', 'Remembered directory', 'Remembered file'].includes(node.kind) || !node.path) continue;
+        if (!['Host', 'Directory system', 'Remembered directory', 'Remembered file'].includes(node.kind) || !node.path) continue;
         const [px, py] = coordinates[i];
-        const radius = node.kind === 'Directory system' ? 27 : node.kind === 'Remembered directory' ? 16 : 11;
+        const radius = node.kind === 'Host' ? 30 : node.kind === 'Directory system' ? 27 : node.kind === 'Remembered directory' ? 16 : 11;
         const distance = Math.hypot(x - px, y - py) / radius;
         if (distance <= 1 && (!best || distance < best.distance)) best = {node, distance};
     }
@@ -306,7 +311,19 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
     for (let i = 0; i < scene.nodes.length; i++) {
         if (!visible.has(i)) continue;
         const node = scene.nodes[i], [x, y] = coordinates[i];
-        if (node.kind === 'Directory system') {
+        if (node.kind === 'Host') {
+            glow(cr, x, y, 70, node.color, 0.55 * intensity);
+            circle(cr, x, y, 10, node.color, 0.98);
+            circle(cr, x, y, 3.2, '#fff6de', 0.98);
+            source(cr, node.color, 0.42);
+            cr.setLineWidth(0.9);
+            cr.arc(x, y, 18, 0, TAU);
+            cr.stroke();
+            if (settings.labels !== false) {
+                label(cr, x, y + 31, node.name.toUpperCase(), node.color, 12);
+                if (scene.galaxy?.label) label(cr, x, y + 44, scene.galaxy.label.toUpperCase(), '#bdd2ea', 9);
+            }
+        } else if (node.kind === 'Directory system') {
             glow(cr, x, y, 37, node.color, 0.43 * intensity);
             circle(cr, x, y, 7.3, node.color, 0.94);
             circle(cr, x, y, 2.5, '#ffffff', 0.76);

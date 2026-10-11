@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 from app import _build_scene
-from memory_map import MEMORY_AGENT, MEMORY_CLI, build_catalog, read_activities
+from memory_map import MEMORY_AGENT, MEMORY_CLI, GALAXY_LABEL, GALAXY_PATH, build_catalog, read_activities
 
 
 STATE_HOME = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
@@ -49,6 +49,7 @@ def make_scene() -> dict:
         "schema": "factory-observatory-wallpaper/v1",
         "generated_at": int(time.time()),
         "source": "shared-reviewed-progretech-mempalace",
+        "galaxy": {"label": GALAXY_LABEL, "path": str(GALAXY_PATH)},
         "memory_source": {"provider": "mempalace", "cli": MEMORY_CLI, "agent": MEMORY_AGENT},
         "counts": {"activities": len(activities), "files": len(files), "directories": len({item.directory for item in files}), "agents": len(active_agents)},
         "nodes": compact_nodes,
