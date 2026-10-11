@@ -208,7 +208,7 @@ def _page_html(*, refresh_seconds: int | None = None) -> tuple[str, int, int, in
         nodes.change.emit();
         const l=labels.data;
         for(let i=0;i<l.x.length;i++) {
-            const p=project(l.bx[i],l.by[i],l.bz[i]);l.x[i]=p[0];l.y[i]=p[1]+(l.kind[i]==='Agent'?-0.36:0.29);
+            const p=project(l.bx[i],l.by[i],l.bz[i]);l.x[i]=p[0];l.y[i]=p[1]+(l.kind[i]==='Directory system'?0.31:-0.36);
         }
         labels.change.emit();
         const e=links.data;
