@@ -19,7 +19,7 @@ The default display holds up to **160 remembered files** and **48 remembered dir
 Tested with Ubuntu GNOME Shell 50 on Wayland. Python 3.10+ and a user systemd session are required. This GNOME Shell extension has no macOS or Windows release.
 
 ```bash
-git clone https://github.com/progretech-llc/factory-observatory.git constellation
+git clone https://github.com/progretech-llc/constellation.git constellation
 cd constellation
 ./install-ubuntu.sh
 ```
@@ -74,4 +74,4 @@ The CLI path above is an example only. Use the path on your workstation and the 
 
 The native app's **Open interactive map** button launches a Bokeh view bound to `127.0.0.1:8765`; hover to inspect remembered paths. Run `.venv/bin/python app.py --no-open` to save a local HTML snapshot. Run `gjs -m gnome-extension/render-preview.js ~/.local/state/factory-observatory/scene.json /tmp/constellation.png 1920 1080 assets/progre-foreground.png` to preview the exact Cairo composition. The GNOME background group is an internal Shell integration point and should be rechecked after Shell upgrades.
 
-The code is MIT licensed. The bundled [Progre foreground, preview, and brand identifiers](assets/PROGRE-ASSET-LICENSE.md) have separate, rights-reserved terms; they are **not** MIT licensed. You can reuse the galaxy code for another project and supply your own foreground. The official release retains its lower-right ProgreTech credit. [GitHub's licensing guide](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/licensing-a-repository) explains why repositories with separately licensed material need an explicit scope statement. This release does not include private factory memory, scene JSON, or credentials.
+The code is MIT licensed. The bundled [Progre foreground, preview, and brand identifiers](assets/PROGRE-ASSET-LICENSE.md) have separate, rights-reserved terms; they are **not** MIT licensed. See [LICENSING.md](LICENSING.md) for the exact file scope. You can reuse the galaxy code for another project and supply your own foreground. The official release retains its lower-right ProgreTech credit. [GitHub's licensing guide](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/licensing-a-repository) explains why repositories with separately licensed material need an explicit scope statement. This release does not include private factory memory, scene JSON, or credentials.
