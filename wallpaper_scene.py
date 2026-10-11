@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 from app import _build_scene
-from memory_map import build_catalog, read_activities
+from memory_map import CONFIG, build_catalog, read_activities
 
 
 STATE_HOME = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
@@ -25,6 +25,8 @@ def make_scene() -> dict:
     compact_nodes = [
         {
             "x": round(nodes["bx"][index], 4),
+            "id": nodes["id"][index],
+            "orbit_parent": nodes["orbit_parent"][index],
             "y": round(nodes["by"][index], 4),
             "z": round(nodes["bz"][index], 4),
             "name": nodes["name"][index],
@@ -32,6 +34,10 @@ def make_scene() -> dict:
             "color": nodes["color"][index],
             "action": nodes["action"][index],
             "alpha": nodes["alpha"][index],
+            "path": nodes["path"][index],
+            "root": nodes["root"][index],
+            "memory": nodes["memory"][index].split(", ")[0],
+            "memory_project": nodes["memory_project"][index],
         }
         for index in range(len(nodes["name"]))
     ]
@@ -43,6 +49,11 @@ def make_scene() -> dict:
         "schema": "factory-observatory-wallpaper/v1",
         "generated_at": int(time.time()),
         "source": "configured-reviewed-memory",
+        "memory_source": {
+            "provider": CONFIG["memory"]["provider"],
+            "cli": str(Path(CONFIG["memory"].get("cli", "")).expanduser()) if CONFIG["memory"].get("cli") else "",
+            "agent": CONFIG["memory"].get("agent", ""),
+        },
         "counts": {"activities": len(activities), "files": len(files), "directories": len({item.directory for item in files}), "agents": len(active_agents)},
         "nodes": compact_nodes,
         "links": compact_links,

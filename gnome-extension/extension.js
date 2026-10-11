@@ -1,13 +1,17 @@
 import Cairo from 'cairo';
+import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import Meta from 'gi://Meta';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
-import {DEFAULT_SETTINGS, renderGalaxy} from './galaxy.js';
+import {DEFAULT_SETTINGS, hitTest, layoutScene, renderGalaxy} from './galaxy.js';
 
 const SCENE_PATH = GLib.build_filenamev([GLib.get_user_state_dir(), 'factory-observatory', 'scene.json']);
 const CONFIG_PATH = GLib.build_filenamev([GLib.get_user_config_dir(), 'factory-observatory', 'wallpaper.json']);
 const FOREGROUND_PATH = GLib.build_filenamev([GLib.get_user_data_dir(), 'constellation', 'foreground.png']);
+const LEGACY_FOREGROUND_PATH = GLib.build_filenamev([GLib.get_user_data_dir(), 'constellation', 'progre-foreground.png']);
 
 function readJson(path) {
     const [ok, bytes] = GLib.file_get_contents(path);
@@ -23,9 +27,14 @@ export default class FactoryObservatoryWallpaper extends Extension {
         this._areas = [];
         this._phase = 0.22;
         this._motionTime = 0;
+        this._focus = null;
         this._lastTick = GLib.get_monotonic_time();
         this._reload();
         this._buildAreas();
+        this._tooltip = new St.Label({visible: false, reactive: false,
+            style: 'background-color: rgba(8, 15, 31, 0.94); color: #e5f2ff; padding: 8px 12px; border-radius: 8px; font-size: 11px;'});
+        Main.uiGroup.add_child(this._tooltip);
+        this._captureId = global.stage.connect('captured-event', (_actor, event) => this._onCaptured(event));
         this._monitorId = Main.layoutManager.connect('monitors-changed', () => this._buildAreas());
         this._refreshId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 2, () => {
             this._reload();
@@ -40,11 +49,16 @@ export default class FactoryObservatoryWallpaper extends Extension {
                 this._motionTime += elapsed;
                 for (const area of this._areas) area.queue_repaint();
             }
+            this._updateHover();
             return GLib.SOURCE_CONTINUE;
         });
     }
 
     disable() {
+        if (this._captureId) global.stage.disconnect(this._captureId);
+        this._captureId = null;
+        this._tooltip?.destroy();
+        this._tooltip = null;
         for (const id of [this._tickId, this._refreshId]) {
             if (id) GLib.Source.remove(id);
         }
@@ -56,6 +70,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
         this._areas = [];
         this._scene = null;
         this._foreground = null;
+        this._focus = null;
     }
 
     _reload() {
@@ -85,7 +100,8 @@ export default class FactoryObservatoryWallpaper extends Extension {
         }
         if (!this._foreground) {
             try {
-                this._foreground = Cairo.ImageSurface.createFromPNG(FOREGROUND_PATH);
+                this._foreground = Cairo.ImageSurface.createFromPNG(
+                    GLib.file_test(FOREGROUND_PATH, GLib.FileTest.EXISTS) ? FOREGROUND_PATH : LEGACY_FOREGROUND_PATH);
             } catch (_error) {
                 this._foreground = null;
             }
@@ -94,6 +110,8 @@ export default class FactoryObservatoryWallpaper extends Extension {
             area.visible = this._settings.enabled;
             area.queue_repaint();
         }
+        if (this._focus && !this._scene?.nodes.some(node => node.kind === this._focus.kind &&
+            node.root === this._focus.root && node.path === this._focus.path)) this._focus = null;
     }
 
     _clamp(value, fallback) {
@@ -113,7 +131,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
             area.connect('repaint', actor => {
                 const cr = actor.get_context();
                 try {
-                    renderGalaxy(cr, actor.width, actor.height, this._scene, this._settings, this._phase, this._motionTime, this._foreground);
+                    renderGalaxy(cr, actor.width, actor.height, this._scene, this._settings, this._phase, this._motionTime, this._foreground, this._focus);
                 } finally {
                     cr.$dispose();
                 }
@@ -121,6 +139,107 @@ export default class FactoryObservatoryWallpaper extends Extension {
             Main.layoutManager._backgroundGroup.add_child(area);
             this._areas.push(area);
             area.queue_repaint();
+        }
+    }
+
+    _desktopPoint(x, y) {
+        if (!this._settings.enabled || Main.overview.visible || Main.modalCount > 0 ||
+            y < (Main.panel?.height ?? 0)) return false;
+        for (const actor of global.get_window_actors()) {
+            const window = actor.meta_window;
+            if (!window || !actor.visible || window.get_window_type() === Meta.WindowType.DESKTOP) continue;
+            const rect = window.get_frame_rect();
+            if (x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height)
+                return false;
+        }
+        return true;
+    }
+
+    _hitNode(x, y) {
+        if (!this._scene?.nodes || !this._desktopPoint(x, y)) return null;
+        for (const area of this._areas) {
+            if (x < area.x || y < area.y || x >= area.x + area.width || y >= area.y + area.height) continue;
+            const skyMode = this._settings.foreground !== false && this._foreground !== null;
+            const {coordinates, visible} = layoutScene(this._scene, this._phase, area.width, area.height, skyMode, this._focus);
+            return hitTest(this._scene, coordinates, visible, x - area.x, y - area.y);
+        }
+        return null;
+    }
+
+    _updateHover() {
+        if (!this._tooltip) return;
+        const [x, y, modifiers] = global.get_pointer();
+        const node = this._hitNode(x, y);
+        const ctrl = (modifiers & Clutter.ModifierType.CONTROL_MASK) !== 0;
+        if (!node || (node.kind === 'Remembered file' && !ctrl)) {
+            this._tooltip.hide();
+            return;
+        }
+        const path = node.kind === 'Remembered file' ? GLib.path_get_dirname(node.path) : node.path;
+        const displayedPath = path.length > 96 ? `…${path.slice(-95)}` : path;
+        const memory = node.kind === 'Remembered file' && node.memory &&
+            this._scene.memory_source?.provider === 'mempalace';
+        this._tooltip.text = `${node.name}  →  ${displayedPath}\n` +
+            (node.kind === 'Remembered file' ?
+                `Ctrl+click: open folder${memory ? '   ·   Ctrl+Shift+click: newest memory' : ''}` :
+                'Click: open folder   ·   Alt+click: focus system');
+        this._tooltip.set_position(Math.max(4, Math.min(x + 18, global.stage.width - 560)),
+            Math.max(4, Math.min(y + 18, global.stage.height - 65)));
+        this._tooltip.show();
+    }
+
+    _onCaptured(event) {
+        if (event.type() !== Clutter.EventType.BUTTON_PRESS || event.get_button() !== 1)
+            return Clutter.EVENT_PROPAGATE;
+        const [x, y] = event.get_coords();
+        const modifiers = event.get_state();
+        const alt = (modifiers & Clutter.ModifierType.MOD1_MASK) !== 0;
+        const ctrl = (modifiers & Clutter.ModifierType.CONTROL_MASK) !== 0;
+        const shift = (modifiers & Clutter.ModifierType.SHIFT_MASK) !== 0;
+        const node = this._hitNode(x, y);
+        if (alt) {
+            if (!node && this._focus && this._desktopPoint(x, y)) {
+                this._focus = null;
+            } else if (node) {
+                const target = node.kind === 'Remembered file' ?
+                    this._scene.nodes.find(item => item.kind === 'Remembered directory' && item.path === GLib.path_get_dirname(node.path)) ?? node : node;
+                this._focus = this._focus?.path === target.path && this._focus?.root === target.root ?
+                    null : {kind: target.kind, path: target.path, root: target.root, name: target.name};
+            } else return Clutter.EVENT_PROPAGATE;
+            for (const area of this._areas) area.queue_repaint();
+            this._updateHover();
+            return Clutter.EVENT_STOP;
+        }
+        if (!node) return Clutter.EVENT_PROPAGATE;
+        if (node.kind === 'Remembered file') {
+            if (!ctrl) return Clutter.EVENT_PROPAGATE;
+            if (shift && node.memory && this._scene.memory_source?.provider === 'mempalace')
+                this._openMemory(node);
+            else this._openFolder(GLib.path_get_dirname(node.path));
+        } else this._openFolder(node.path);
+        return Clutter.EVENT_STOP;
+    }
+
+    _openFolder(path) {
+        const file = Gio.File.new_for_path(path);
+        if (file.query_file_type(Gio.FileQueryInfoFlags.NONE, null) !== Gio.FileType.DIRECTORY) {
+            Main.notify('Constellation', 'That folder is no longer available.');
+            return;
+        }
+        Gio.AppInfo.launch_default_for_uri_async(file.get_uri(), null, null, (_source, result) => {
+            try { Gio.AppInfo.launch_default_for_uri_finish(result); }
+            catch (error) { Main.notify('Constellation', `Could not open folder: ${error.message}`); }
+        });
+    }
+
+    _openMemory(node) {
+        const source = this._scene.memory_source;
+        if (!source?.cli || !source.agent || !node.memory_project) return;
+        try {
+            Gio.Subprocess.new(['/usr/bin/python3', GLib.build_filenamev([this.path, 'memory_viewer.py']),
+                source.cli, source.agent, node.memory_project, node.memory], Gio.SubprocessFlags.NONE);
+        } catch (error) {
+            Main.notify('Constellation', `Could not open memory: ${error.message}`);
         }
     }
 }

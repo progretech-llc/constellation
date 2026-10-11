@@ -30,6 +30,14 @@ cd constellation
 
 Open **Constellation by ProgreTech** from the app menu to control rotation, glow, rays, density, foreground, links and labels. The wallpaper keeps running without the control window. `gnome-extensions disable factory-observatory@progretech.com` turns it off; `systemctl --user disable --now factory-observatory-scene.timer` stops memory refreshes. The static GNOME wallpaper setting is untouched.
 
+### Navigate from the wallpaper
+
+On an exposed part of the desktop, **click a solar system or remembered directory** to open it in the default file manager. **Hold Ctrl over a file star** to see its containing folder; Ctrl-click opens that folder. With a MemPalace source, **Ctrl+Shift-click** the file star opens its newest remembered entry in a read-only window, using the configured MemPalace CLI and your configured identity. The viewer resolves the full entry ID through the authorized CLI; it never reads the database directly. If a source entry is no longer available, the viewer reports that instead of opening a different record. JSON memory sources currently support folder navigation but have no MemPalace entry viewer.
+
+**Alt-click a solar system or remembered directory** to focus and enlarge its remembered files, subfolders and connected agents. Alt-click the same node or an empty part of the sky to return to the full map. Folder and memory actions are available only where the desktop is visible; they do not intercept clicks through application windows.
+
+Subfolders orbit their nearest visible parent folder (or their solar system), and remembered files orbit their containing folder. These local orbits continue in the focused view, where the selected folder stays centered.
+
 ## Point it at your memory and solar systems
 
 The installer creates `~/.config/constellation/sources.json`, initially with a local JSON memory directory and your home directory as one root. Use `configure.py` to replace those values; every `--root` replaces the whole root list. Paths must be absolute or start with `~` in the JSON file. Up to 12 roots are supported. A root appears as a solar system even when it has no remembered files.
