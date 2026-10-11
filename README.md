@@ -6,6 +6,8 @@ Constellation turns reviewed agent-memory activity into a rotating, luminous map
 
 *Live workstation preview supplied by Edwin. Progre and this preview are ProgreTech visual assets; see the [asset terms](assets/PROGRE-ASSET-LICENSE.md).*
 
+The preview captures an earlier roster. Current factory configuration groups retired role IDs under Rend and labels the separate Rend directory system **MS-S1 Max**.
+
 The map is an interpretation of remembered activity, not a file monitor or an access-control tool. Only existing files inside configured roots can become file stars. The renderer never scans an entire disk to invent activity. Paths that look like credentials or private configuration are filtered. For MemPalace, Constellation calls the supplied CLI under **your own authorized identity** and reads shared structured activities; it does not open the database or another role's private memory. A JSON-directory adapter lets other memory systems export the same small activity shape.
 
 ### How updates appear
@@ -69,6 +71,10 @@ python3 configure.py \
 ```
 
 The CLI path above is an example only. Use the path on your workstation and the identity you are authorized to use. The reader accepts MemPalace's reviewed `structured-agent-activity` records in the selected project. Other authors' shared project records retain their attribution. Use `sources.json` to add `"include_subprojects": true` inside `memory` if intended. After editing sources or dropping new JSON summaries, refresh immediately with `systemctl --user start factory-observatory-scene.service`. The timer refreshes every two minutes. Check failures with `journalctl --user -u factory-observatory-scene.service -n 30`.
+
+To keep a current roster while showing older memories, configure display-only author aliases. For example, `python3 configure.py --agents codex rend lyra mak progre imagen moxy --alias architect=rend --alias reviewer=rend --alias fast=rend --alias designer=rend --alias factory-worker=rend --unlisted-agent rend` groups those older authors, and any other unlisted authors, under Rend. Set `--center-agent codex` separately if desired. These choices change scene nodes and links only; the source memory records and their original authors remain unchanged. Omit `--unlisted-agent` if you want unlisted authors to receive their own nodes.
+
+Choose roots at the level you want to see as solar systems. For instance, `--root "MS-S1 Max=$HOME/Rend" --root "Repositories=$HOME/Projects"` labels a work directory without confusing it with the Rend agent. If a drive contains several desired solar systems, configure those child directories as separate roots and leave out the broad parent root. Files named through a symlinked root still belong to that root as long as they resolve within it.
 
 ## Inspect and extend
 

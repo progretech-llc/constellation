@@ -100,6 +100,17 @@ class ConfiguredSourcesTests(unittest.TestCase):
         files, _ = self.map.build_catalog(activities)
         self.assertEqual([item.path for item in files], [str(self.file)])
 
+    def test_retired_authors_can_share_one_display_node_without_rewriting_memory(self):
+        self.map.CONFIG['agent_aliases'] = {'old-designer': 'worker'}
+        self.map.CONFIG['unlisted_agent'] = 'worker'
+        activities = [self.map.Activity('legacy-1', 'old-designer', 'Example', [f'Modified {self.file}']),
+                      self.map.Activity('legacy-2', 'unknown-old-role', 'Example', [f'Opened {self.file}'])]
+        files, agents = self.map.build_catalog(activities)
+        self.assertEqual([activity.author for activity in activities], ['old-designer', 'unknown-old-role'])
+        self.assertEqual(agents, ['worker'])
+        self.assertEqual(files[0].agents, {'worker': 'modified'})
+        self.assertEqual(files[0].memory_ids, ['legacy-1', 'legacy-2'])
+
 
 if __name__ == '__main__':
     unittest.main()

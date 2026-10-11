@@ -21,6 +21,8 @@ def main() -> None:
     parser.add_argument('--root', action='append', metavar='LABEL=PATH', help='Solar system directory; repeat to replace all roots')
     parser.add_argument('--center-agent', help='Agent ID to place at the center')
     parser.add_argument('--agents', nargs='+', help='Known agent IDs to show even when quiet')
+    parser.add_argument('--alias', action='append', metavar='OLD=NEW', help='Display an old author under a current agent; repeatable')
+    parser.add_argument('--unlisted-agent', help='Display other unlisted authors under this configured agent')
     args = parser.parse_args()
     if CONFIG_PATH.exists():
         data = json.loads(CONFIG_PATH.read_text())
@@ -52,6 +54,15 @@ def main() -> None:
         data['center_agent'] = args.center_agent
     if args.agents is not None:
         data['agents'] = args.agents
+    if args.alias:
+        aliases = data.setdefault('agent_aliases', {})
+        for value in args.alias:
+            old, separator, new = value.partition('=')
+            if not separator or not old.strip() or not new.strip():
+                parser.error('--alias must be OLD=NEW')
+            aliases[old.strip()] = new.strip()
+    if args.unlisted_agent is not None:
+        data['unlisted_agent'] = args.unlisted_agent
     CONFIG_PATH.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile('w', dir=CONFIG_PATH.parent, prefix='.sources-', delete=False) as stream:
         temporary = Path(stream.name)

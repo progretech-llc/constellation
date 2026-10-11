@@ -8,5 +8,7 @@
     {"label": "Projects", "path": "~/Projects"}
   ],
   "center_agent": "",
-  "agents": []
+  "agents": [],
+  "agent_aliases": {},
+  "unlisted_agent": ""
 }

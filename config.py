@@ -31,6 +31,14 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
         labels.add(entry['label'])
     data.setdefault('center_agent', '')
     data.setdefault('agents', [])
+    aliases = data.setdefault('agent_aliases', {})
+    fallback = data.setdefault('unlisted_agent', '')
+    if not isinstance(data['agents'], list) or any(not isinstance(agent, str) or not agent for agent in data['agents']):
+        raise ValueError('agents must be a list of nonempty agent IDs')
+    if not isinstance(aliases, dict) or any(not isinstance(old, str) or not old or not isinstance(new, str) or not new for old, new in aliases.items()):
+        raise ValueError('agent_aliases must map nonempty agent IDs to nonempty agent IDs')
+    if not isinstance(fallback, str) or (fallback and (not data['agents'] or fallback not in data['agents'])):
+        raise ValueError('unlisted_agent must be one of the configured agents')
     return data
 
 

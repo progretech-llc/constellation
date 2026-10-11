@@ -26,6 +26,14 @@ MIN_FILES_PER_AGENT = 4
 
 ROOTS = root_entries(CONFIG)
 
+
+def _display_agent(author: str) -> str:
+    """Map scene nodes only; Activity.author and memory IDs keep original provenance."""
+    agent = CONFIG['agent_aliases'].get(author, author)
+    if CONFIG['agents'] and agent not in CONFIG['agents'] and CONFIG['unlisted_agent']:
+        return CONFIG['unlisted_agent']
+    return agent
+
 HEADER = re.compile(r"^([0-9a-f]{8}) \[([^/]+)/([^\]]+)\] (.+)$")
 PATH = re.compile(r"(?<![A-Za-z0-9:/])/(?:[^\s\"'<>|),;\]]+)")
 LINE_NUMBER = re.compile(r":\d+(?::\d+)?$")
@@ -211,12 +219,13 @@ def build_catalog(activities: list[Activity]) -> tuple[list[FileReference], list
     files: dict[str, FileReference] = {}
     agents: list[str] = []
     for rank, activity in enumerate(activities):
-        if activity.author not in agents:
-            agents.append(activity.author)
+        display_agent = _display_agent(activity.author)
+        if display_agent not in agents:
+            agents.append(display_agent)
         seen_this_activity: set[tuple[str, str]] = set()
         for text, action in [(step, _classify(step)) for step in activity.steps] + [(evidence, "referenced") for evidence in activity.evidence]:
             for path, directory, root in _paths(text):
-                marker = (path, activity.author)
+                marker = (path, display_agent)
                 if marker in seen_this_activity and action == "referenced":
                     continue
                 seen_this_activity.add(marker)
@@ -224,10 +233,10 @@ def build_catalog(activities: list[Activity]) -> tuple[list[FileReference], list
                 item.newest_rank = min(item.newest_rank, rank)
                 if activity.memory_id not in item.memory_ids:
                     item.memory_ids.append(activity.memory_id)
-                previous = item.agents.get(activity.author)
+                previous = item.agents.get(display_agent)
                 priority = {"referenced": 0, "accessed": 1, "created": 2, "modified": 3}
                 if previous is None or priority[action] > priority[previous]:
-                    item.agents[activity.author] = action
+                    item.agents[display_agent] = action
     newest = sorted(files.values(), key=lambda item: (item.newest_rank, item.path))
     kept_directories: set[str] = set()
     selected: list[FileReference] = []
