@@ -8,7 +8,7 @@ Constellation turns reviewed agent-memory activity into a rotating, luminous map
 
 The preview captures an earlier roster and layout. The current factory configuration uses **MS-S1 Max** as the host star, with **PT-CONTEXT** as its central directory and selected child folders as solar systems.
 
-The map is an interpretation of remembered activity, not a file monitor or an access-control tool. Only existing files inside configured roots can become file stars. The renderer never scans an entire disk to invent activity. Paths that look like credentials or private configuration are filtered. For MemPalace, Constellation calls the supplied CLI under **your own authorized identity** and reads shared structured activities; it does not open the database or another role's private memory. A JSON-directory adapter lets other memory systems export the same small activity shape.
+The map is an interpretation of remembered activity, not a file monitor or an access-control tool. Only existing files inside configured roots can become file stars. The renderer never scans an entire disk to invent activity. Paths that look like credentials or private configuration are filtered. For Hindsight, Constellation calls the supplied CLI under **your own authorized identity** and reads shared structured activities; it does not open the database or another role's private memory. A JSON-directory adapter lets other memory systems export the same small activity shape.
 
 ### How updates appear
 
@@ -32,13 +32,13 @@ Open **Constellation by ProgreTech** from the app menu to control rotation, glow
 
 ### Navigate from the wallpaper
 
-On an exposed part of the desktop, **click a solar system or remembered directory** to open it in the default file manager. **Hold Ctrl over a file star** to see its containing folder; Ctrl-click opens that folder. With a MemPalace source, **Ctrl+Shift-click** the file star opens its newest remembered entry in a read-only window, using the configured MemPalace CLI and your configured identity. The viewer resolves the full entry ID through the authorized CLI; it never reads the database directly. If a source entry is no longer available, the viewer reports that instead of opening a different record. JSON memory sources currently support folder navigation but have no MemPalace entry viewer.
+On an exposed part of the desktop, **click a solar system or remembered directory** to open it in the default file manager. **Hold Ctrl over a file star** to see its containing folder; Ctrl-click opens that folder. With a Hindsight source, **Ctrl+Shift-click** the file star opens its newest remembered entry in a read-only window, using the configured Hindsight CLI and your configured identity. The viewer resolves the full entry ID through the authorized CLI; it never reads the database directly. If a source entry is no longer available, the viewer reports that instead of opening a different record. JSON memory sources currently support folder navigation but have no Hindsight entry viewer.
 
 **Alt-click a solar system or remembered directory** to focus and enlarge its remembered files, subfolders and connected agents. Alt-click the same node or an empty part of the sky to return to the full map. Folder and memory actions are available only where the desktop is visible; they do not intercept clicks through application windows.
 
 On Ubuntu Wayland, Desktop Icons NG owns the desktop pointer surface. Constellation places a small Shell click target only under the currently hovered actionable star. Pause over a star until its path tooltip appears, then click or use the modifier shown there. The target follows the pointer on the wallpaper's 125 ms redraw cycle; ordinary desktop icons remain clickable away from stars. If Alt-clicking empty sky does not reset a focused view, Alt-click the host star instead. After installing an extension code update, the current Wayland Shell keeps its cached JavaScript until the next login; no logout is needed for scene-data refreshes.
 
-A small lower-right legend keeps these shortcuts, the remembered-file count, and the ProgreTech credit together on the wallpaper. The MemPalace shortcut appears only when MemPalace is the configured source.
+A small lower-right legend keeps these shortcuts, the remembered-file count, and the ProgreTech credit together on the wallpaper. The Hindsight shortcut appears only when Hindsight is the configured source.
 
 Subfolders orbit their nearest visible parent folder (or their solar system), and remembered files orbit their containing folder. These local orbits continue in the focused view, where the selected folder stays centered.
 
@@ -71,11 +71,11 @@ Put one JSON object or an array of objects in each `*.json` file in that directo
 
 Replace `USER` with your actual login; the file must already exist inside a configured root. `created`, `modified`, and `accessed` are inferred from step wording; all other references show as referenced. The exporter should supply reviewed summaries, not secrets or full conversations. JSON files stay local and are never uploaded by Constellation.
 
-For MemPalace, point to its **CLI executable**, your identity and project; do not point Constellation at the database directory:
+For Hindsight, point to its **CLI executable**, your identity and project; do not point Constellation at the database directory:
 
 ```bash
 python3 configure.py \
-  --mempalace-cli "$HOME/Rend/bin/mempalace" \
+  --hindsight-cli "$HOME/Rend/bin/hindsight" \
   --agent YOUR_OWN_ID --project YOUR_PROJECT \
   --host-name "My Workstation" --galaxy "Home=$HOME" \
   --root "Repositories=$HOME/Projects" \
@@ -83,7 +83,7 @@ python3 configure.py \
   --agents YOUR_OWN_ID worker-a worker-b
 ```
 
-The CLI path above is an example only. Use the path on your workstation and the identity you are authorized to use. The reader accepts MemPalace's reviewed `structured-agent-activity` records in the selected project. Other authors' shared project records retain their attribution. Use `sources.json` to add `"include_subprojects": true` inside `memory` if intended. After editing sources or dropping new JSON summaries, refresh immediately with `systemctl --user start factory-observatory-scene.service`. The timer refreshes every two minutes. Check failures with `journalctl --user -u factory-observatory-scene.service -n 30`.
+The CLI path above is an example only. Use the path on your workstation and the identity you are authorized to use. The reader accepts Hindsight's reviewed `structured-agent-activity` records in the selected project. Other authors' shared project records retain their attribution. Use `sources.json` to add `"include_subprojects": true` inside `memory` if intended. After editing sources or dropping new JSON summaries, refresh immediately with `systemctl --user start factory-observatory-scene.service`. The timer refreshes every two minutes. Check failures with `journalctl --user -u factory-observatory-scene.service -n 30`.
 
 To keep a current roster while showing older memories, configure display-only author aliases. For example, `python3 configure.py --agents codex rend lyra mak progre imagen moxy --alias architect=rend --alias reviewer=rend --alias fast=rend --alias designer=rend --alias factory-worker=rend --unlisted-agent rend` groups those older authors, and any other unlisted authors, under Rend. Configured agent names remain visible when they have no current file links; all agents orbit the host star. These choices change scene nodes and links only; the source memory records and their original authors remain unchanged. Omit `--unlisted-agent` if you want unlisted authors to receive their own nodes. Older `center_agent` settings are accepted but no longer place an agent at the center.
 

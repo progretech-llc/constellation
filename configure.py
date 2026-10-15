@@ -15,9 +15,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group()
     source.add_argument('--memory-dir', type=Path, help='Directory of reviewed JSON activity files')
-    source.add_argument('--mempalace-cli', type=Path, help='Path to your authorized MemPalace CLI')
-    parser.add_argument('--agent', help='Your own MemPalace identity (with --mempalace-cli)')
-    parser.add_argument('--project', help='MemPalace project (with --mempalace-cli)')
+    source.add_argument('--hindsight-cli', type=Path, help='Path to your authorized Hindsight CLI')
+    parser.add_argument('--agent', help='Your own Hindsight identity (with --hindsight-cli)')
+    parser.add_argument('--project', help='Hindsight project (with --hindsight-cli)')
     parser.add_argument('--root', action='append', metavar='LABEL=PATH', help='Solar system directory; repeat to replace all roots')
     parser.add_argument('--host-name', help='Central workstation star name (defaults to the system hostname)')
     parser.add_argument('--galaxy', metavar='LABEL=PATH', help='Central parent directory, such as PT-CONTEXT=/mnt/pt-context')
@@ -36,13 +36,13 @@ def main() -> None:
         directory = args.memory_dir.expanduser().resolve()
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         data['memory'] = {'provider': 'json', 'directory': str(directory)}
-    if args.mempalace_cli:
+    if args.hindsight_cli:
         if not args.agent or not args.project:
-            parser.error('--mempalace-cli requires --agent and --project')
-        cli = args.mempalace_cli.expanduser().resolve()
+            parser.error('--hindsight-cli requires --agent and --project')
+        cli = args.hindsight_cli.expanduser().resolve()
         if not cli.is_file() or not os.access(cli, os.X_OK):
-            parser.error(f'MemPalace CLI is not executable: {cli}')
-        data['memory'] = {'provider': 'mempalace', 'cli': str(cli),
+            parser.error(f'Hindsight CLI is not executable: {cli}')
+        data['memory'] = {'provider': 'hindsight', 'cli': str(cli),
                           'agent': args.agent, 'project': args.project}
     if args.root:
         roots = []

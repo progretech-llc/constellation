@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Show one reviewed MemPalace entry through the configured identity-bound CLI."""
+"""Show one reviewed Hindsight entry through the configured identity-bound CLI."""
 
 from __future__ import annotations
 
@@ -19,23 +19,20 @@ def resolve_memory_id(cli: str, agent: str, project: str, memory_id: str) -> str
         return memory_id
     if not SHORT_ID.fullmatch(memory_id):
         raise ValueError("Invalid memory ID")
-    result = subprocess.run(
-        [cli, "--agent", agent, "context", "Activity", "--project", project, "--limit", "2000"],
-        capture_output=True, text=True, timeout=20, check=True,
-    )
-    matches = [full for full in CONTEXT_HEADER.findall(result.stdout) if full.startswith(memory_id)]
-    if len(matches) != 1:
-        raise LookupError("The exact memory entry is unavailable or ambiguous in the authorized project context")
-    return matches[0]
+    result=subprocess.run([cli,'--agent',agent,'show',memory_id,'--project',project,'--json'],capture_output=True,text=True,timeout=20,check=True)
+    import json
+    row=json.loads(result.stdout)
+    if row.get('scope')!='project' or str(row.get('project_id','')).casefold()!=project.casefold():raise LookupError('Exact shared project memory unavailable')
+    return row['memory_id']
 
 
 def read_memory(cli: str, agent: str, project: str, memory_id: str) -> tuple[str, str]:
     if not Path(cli).is_file() or not Path(cli).is_absolute():
-        raise ValueError("Configured MemPalace CLI is unavailable")
+        raise ValueError("Configured Hindsight CLI is unavailable")
     if not re.fullmatch(r"[a-z0-9-]{1,40}", agent) or not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", project):
-        raise ValueError("Invalid MemPalace identity or project")
+        raise ValueError("Invalid Hindsight identity or project")
     full_id = resolve_memory_id(cli, agent, project, memory_id)
-    result = subprocess.run([cli, "--agent", agent, "show", full_id],
+    result = subprocess.run([cli, "--agent", agent, "show", full_id, "--project", project],
                             capture_output=True, text=True, timeout=20, check=True)
     return full_id, result.stdout
 
@@ -57,7 +54,7 @@ def main() -> None:
             super().__init__(application_id="com.progretech.ConstellationMemory", flags=Gio.ApplicationFlags.NON_UNIQUE)
 
         def do_activate(self):
-            window = Gtk.ApplicationWindow(application=self, title=f"Constellation · MemPalace {full_id}")
+            window = Gtk.ApplicationWindow(application=self, title=f"Constellation · Hindsight {full_id}")
             window.set_default_size(850, 650)
             scroll = Gtk.ScrolledWindow()
             text = Gtk.TextView(editable=False, cursor_visible=False, monospace=True,
