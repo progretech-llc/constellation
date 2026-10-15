@@ -115,6 +115,48 @@ class ConfiguredSourcesTests(unittest.TestCase):
         # Reject the entire quotation, even if its whitespace prefix exists.
         self.assertEqual(self.map._paths(f'Read "{self.file} missing suffix"'), [])
 
+    def test_negated_output_does_not_turn_inspection_into_creation(self):
+        for step in (
+            f'Inspected "{self.file}" and catalog metadata. No visual asset was generated or redistributed.',
+            f'Read {self.file}; did not modify or create files.',
+            f'Opened {self.file} without changing it.',
+        ):
+            self.assertEqual(self.map._classify(step), 'accessed')
+        self.assertEqual(self.map._classify('No file was created.'), 'referenced')
+        self.assertEqual(self.map._classify('Never modified a file.'), 'referenced')
+        self.assertEqual(self.map._classify(f'Created {self.file}.'), 'created')
+        self.assertEqual(self.map._classify(f'Modified {self.file}.'), 'modified')
+
+    def test_cli_file_scene_keeps_original_author_and_display_mapping(self):
+        # Sanitized current Hindsight shape: real record ID/author, synthetic file.
+        output = f"""e5afd684 [project/active] Activity: Reviewed shared references
+  author: agent/codex
+  project: Example
+  provenance_type: structured-agent-activity
+Technical steps:
+- Inspected "{self.file}" and catalog metadata. No visual asset was generated or redistributed.
+Evidence:
+- {self.file}
+Teaching references:
+"""
+        self.map.MEMORY['project'] = 'Example'
+        activities = self.map._parse_cli_output(output)
+        self.assertEqual(activities[0].author, 'codex')
+        self.map.CONFIG['agent_aliases'] = {'codex': 'worker'}
+        import app
+        importlib.reload(app)
+        import wallpaper_scene
+        scene_module = importlib.reload(wallpaper_scene)
+        with patch.object(scene_module, 'read_activities', return_value=activities):
+            scene = scene_module.make_scene()
+        node = next(node for node in scene['nodes'] if node['kind'] == 'Remembered file')
+        self.assertEqual(node['memory'], 'e5afd684')
+        self.assertEqual(node['memory_author'], 'codex')
+        self.assertEqual(node['display_agent'], 'worker')
+        self.assertEqual(node['action'], 'accessed')
+        self.assertEqual(node['display_role'], '')  # reserved for shared-worker rendering
+        self.assertEqual(activities[0].author, 'codex')
+
     def test_only_reviewed_hindsight_activity_is_parsed(self):
         self.map.MEMORY['project'] = 'Example'
         output = '''a1b2c3d4 [project/active] Activity: example

@@ -46,6 +46,7 @@ BLOCKED_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".sqlite", ".db", ".env"}
 SENSITIVE_SEGMENT = re.compile(r"(?:credential|secret|password|token|private.key)", re.I)
 WRITE = re.compile(r"\b(create(?:d)?|generat(?:ed|e)|wrote|added|saved|exported|produc(?:ed|e))\b", re.I)
 CHANGE = re.compile(r"\b(edit(?:ed)?|updat(?:ed|e)|modif(?:ied|y)|patch(?:ed)?|chang(?:ed|e)|revis(?:ed|e))\b", re.I)
+NEGATED_CLAUSE = re.compile(r"\b(?:no|not|never|without|didn't|wasn't|weren't|hasn't|haven't)\b[^.;\n]*", re.I)
 READ = re.compile(r"\b(read|opened|inspected|viewed|loaded|reviewed|checked|accessed|examined)\b", re.I)
 
 
@@ -174,6 +175,8 @@ def _read_json_activities() -> list[Activity]:
 
 
 def _classify(step: str) -> str:
+    # A denial of output creation is not evidence of a write.
+    step = NEGATED_CLAUSE.sub(" ", step)
     if CHANGE.search(step):
         return "modified"
     if WRITE.search(step):
