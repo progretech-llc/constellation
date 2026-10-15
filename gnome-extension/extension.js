@@ -196,7 +196,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
         const path = node.kind === 'Remembered file' ? GLib.path_get_dirname(node.path) : node.path;
         const displayedPath = path.length > 96 ? `…${path.slice(-95)}` : path;
         const memory = node.kind === 'Remembered file' && node.memory &&
-            this._scene.memory_source?.provider === 'mempalace';
+            this._scene.memory_source?.provider === 'hindsight';
         this._tooltip.text = `${node.name}  →  ${displayedPath}\n` +
             (node.kind === 'Remembered file' ?
                 `Ctrl+click: open folder${memory ? '   ·   Ctrl+Shift+click: newest memory' : ''}` :
@@ -237,7 +237,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
         if (!node) return Clutter.EVENT_PROPAGATE;
         if (node.kind === 'Remembered file') {
             if (!ctrl) return Clutter.EVENT_PROPAGATE;
-            if (shift && node.memory && this._scene.memory_source?.provider === 'mempalace')
+            if (shift && node.memory && this._scene.memory_source?.provider === 'hindsight')
                 this._openMemory(node);
             else this._openFolder(GLib.path_get_dirname(node.path));
         } else this._openFolder(node.path);

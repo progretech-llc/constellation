@@ -14,12 +14,15 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
         raise RuntimeError(f'Missing source configuration: {path}. Run ./install-user.sh or copy config.example.json.')
     data = json.loads(path.read_text())
     memory = data.get('memory', {})
-    if memory.get('provider') not in {'json', 'mempalace'}:
-        raise ValueError('memory.provider must be json or mempalace')
+    if memory.get('provider')=='mempalace':
+        memory['provider']='hindsight'
+        if str(memory.get('cli','')).endswith('/mempalace'):memory['cli']=str(memory['cli'])[:-9]+'hindsight'
+    if memory.get('provider') not in {'json', 'hindsight'}:
+        raise ValueError('memory.provider must be json or hindsight')
     if memory['provider'] == 'json' and not memory.get('directory'):
         raise ValueError('memory.directory is required for json provider')
-    if memory['provider'] == 'mempalace' and not all(memory.get(key) for key in ('cli', 'agent', 'project')):
-        raise ValueError('memory.cli, memory.agent and memory.project are required for mempalace provider')
+    if memory['provider'] == 'hindsight' and not all(memory.get(key) for key in ('cli', 'agent', 'project')):
+        raise ValueError('memory.cli, memory.agent and memory.project are required for hindsight provider')
     roots = data.get('roots', [])
     if not isinstance(roots, list) or not 1 <= len(roots) <= 12:
         raise ValueError('Configure 1 to 12 directory roots')

@@ -1,4 +1,4 @@
-"""Navigation metadata and exact MemPalace lookup checks."""
+"""Navigation metadata and exact Hindsight lookup checks."""
 
 import importlib.util
 import os
@@ -16,11 +16,12 @@ spec.loader.exec_module(viewer)
 class MemoryNavigationTests(unittest.TestCase):
     def test_short_id_resolves_exact_record_before_show(self):
         with tempfile.TemporaryDirectory() as temp:
-            cli = Path(temp) / 'fake-mempalace'
+            cli = Path(temp) / 'fake-hindsight'
             cli.write_text('''#!/usr/bin/env python3
 import sys
-if 'context' in sys.argv:
-    print('[MEMORY a1b2c3d4-1111-2222-3333-444444444444]')
+if '--json' in sys.argv:
+    import json
+    print(json.dumps({'memory_id':'a1b2c3d4-1111-2222-3333-444444444444','scope':'project','project_id':'ProgreTech'}))
 elif 'show' in sys.argv:
     print('Reviewed activity content')
 ''')
@@ -28,6 +29,11 @@ elif 'show' in sys.argv:
             full_id, text = viewer.read_memory(str(cli), 'codex', 'ProgreTech', 'a1b2c3d4')
             self.assertEqual(full_id, 'a1b2c3d4-1111-2222-3333-444444444444')
             self.assertIn('Reviewed activity', text)
+
+    def test_private_records_do_not_become_planets(self):
+        from hindsight_planets import parse_list
+        text='a1b2c3d4 [agent/active] Private note\n  author: agent/rend\n  owner: rend\n'
+        self.assertEqual(parse_list(text),[])
 
     def test_ambiguous_or_invalid_memory_reference_is_rejected(self):
         with self.assertRaises(ValueError):

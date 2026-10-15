@@ -82,7 +82,7 @@ class ConfiguredSourcesTests(unittest.TestCase):
         self.assertEqual(self.map._paths(f'Opened {outside}'), [])
         self.assertEqual(self.map._paths(f'Opened {secret}'), [])
 
-    def test_only_reviewed_mempalace_activity_is_parsed(self):
+    def test_only_reviewed_hindsight_activity_is_parsed(self):
         self.map.MEMORY['project'] = 'Example'
         output = '''a1b2c3d4 [project/active] Activity: example
   author: agent/worker
@@ -97,8 +97,8 @@ class ConfiguredSourcesTests(unittest.TestCase):
         self.assertEqual(self.map._parse_cli_output(output.replace('structured-agent-activity', 'other')), [])
         self.assertEqual(self.map._parse_cli_output(output.replace('  provenance_type: structured-agent-activity\n', '')), [])
 
-    def test_mempalace_uses_configured_identity_and_project(self):
-        self.map.MEMORY.update({'provider': 'mempalace', 'cli': '/example/mempalace',
+    def test_hindsight_uses_configured_identity_and_project(self):
+        self.map.MEMORY.update({'provider': 'hindsight', 'cli': '/example/hindsight',
                                 'agent': 'my-agent', 'project': 'Example'})
         output = '''a1b2c3d4 [project/active] Activity: example
   author: agent/worker
@@ -114,7 +114,7 @@ class ConfiguredSourcesTests(unittest.TestCase):
             run.return_value.stdout = output
             activities = self.map.read_activities()
         self.assertEqual(len(activities), 1)
-        self.assertEqual(run.call_args_list[0].args[0][:4], ['/example/mempalace', '--agent', 'my-agent', 'list'])
+        self.assertEqual(run.call_args_list[0].args[0][:4], ['/example/hindsight', '--agent', 'my-agent', 'list'])
         self.assertIn('Example', run.call_args_list[1].args[0])
 
     def test_file_cap_replaces_older_nodes(self):
