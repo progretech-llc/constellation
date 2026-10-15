@@ -16,9 +16,16 @@ export const DEFAULT_SETTINGS = Object.freeze({
     solar_rotation_speed: 1.0,
     solar_clockwise: false,
     write_lights: false,
+    black_hole_name: 'Shared worker',
 });
 
 const TAU = Math.PI * 2;
+
+export function blackHoleName(value) {
+    if (typeof value !== 'string') return DEFAULT_SETTINGS.black_hole_name;
+    const clean = value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().replace(/\s+/gu, ' ');
+    return Array.from(clean).slice(0, 32).join('') || DEFAULT_SETTINGS.black_hole_name;
+}
 
 function sharedWorker(node) {
     return node?.kind === 'Agent' && (node.display_role === 'shared-worker' || node.id === 'agent:factory-worker');
@@ -299,7 +306,7 @@ function drawActivityLights(cr, lights, intensity) {
     }
 }
 
-function drawSharedWorker(cr, x, y, time, intensity) {
+function drawSharedWorker(cr, x, y, time, intensity, name) {
     glow(cr, x, y, 43, '#8c65ca', 0.38 * intensity);
     cr.save();
     cr.translate(x, y);
@@ -317,7 +324,7 @@ function drawSharedWorker(cr, x, y, time, intensity) {
     cr.setLineWidth(1.1);
     cr.arc(x, y, 12.5, 0, TAU);
     cr.stroke();
-    label(cr, x, y + 33, 'SHARED WORKER', '#d3c6ec', 10);
+    label(cr, x, y + 33, blackHoleName(name), '#d3c6ec', 10, 204);
     label(cr, x, y + 47, 'RECORDED ACTIVITY', '#a99abb', 8);
 }
 
@@ -407,10 +414,15 @@ function lightRays(cr, phase, width, height, settings, skyMode) {
     }
 }
 
-function label(cr, x, y, text, hex, size = 11) {
+function label(cr, x, y, text, hex, size = 11, maxWidth = null) {
     source(cr, hex, 0.91);
     cr.selectFontFace('Sans', Cairo.FontSlant.NORMAL, Cairo.FontWeight.BOLD);
     cr.setFontSize(size);
+    if (maxWidth !== null && cr.textExtents(text).width > maxWidth) {
+        const letters = Array.from(text);
+        while (letters.length && cr.textExtents(letters.join('') + '…').width > maxWidth) letters.pop();
+        text = letters.join('') + '…';
+    }
     const extents = cr.textExtents(text);
     cr.moveTo(x - extents.width / 2, y);
     cr.showText(text);
@@ -526,7 +538,7 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
             circle(cr, x, y, 2.5, '#ffffff', 0.76);
             if (settings.labels !== false) label(cr, x, y - 17, node.name.toUpperCase(), '#d5e7f7', 10);
         } else if (sharedWorker(node)) {
-            drawSharedWorker(cr, x, y, time, intensity);
+            drawSharedWorker(cr, x, y, time, intensity, settings.black_hole_name);
         } else if (node.kind === 'Agent') {
             const core = node.action === 'center';
             glow(cr, x, y, core ? 71 : 29, node.color, (core ? 0.61 : 0.43) * intensity * node.alpha);

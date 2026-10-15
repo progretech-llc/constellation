@@ -95,6 +95,8 @@ class AgentPanel(Gtk.Box):
                 box.append(Gtk.Label(label='Shared identity for clients without a named role. '
                     'Recorded activity, not a live-worker status. Fixed black hole with inward-only file lights.',
                     xalign=0, wrap=True))
+                box.append(Gtk.Label(label='Rename its display label in Appearance → Black-hole display name.',
+                                     xalign=0, wrap=True))
             self.items.append(box)
         if self.sources:
             label = Gtk.Label(label='Detected gateways and clients', xalign=0)

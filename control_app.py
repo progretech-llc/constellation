@@ -41,7 +41,15 @@ DEFAULT = {
     "solar_rotation_speed": 1.0,
     "solar_clockwise": False,
     "write_lights": False,
+    "black_hole_name": "Shared worker",
 }
+
+
+def black_hole_name(value) -> str:
+    if not isinstance(value, str):
+        return DEFAULT['black_hole_name']
+    clean = ''.join(' ' if ord(c) < 32 or ord(c) == 127 else c for c in value)
+    return ' '.join(clean.split())[:32] or DEFAULT['black_hole_name']
 
 
 def settings() -> dict:
@@ -104,6 +112,23 @@ class ControlWindow(Gtk.ApplicationWindow):
         content.append(self.status)
         self._refresh_status()
 
+        name_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        name_box.append(Gtk.Label(label='Black-hole display name', xalign=0))
+        name_row = Gtk.Box(spacing=8)
+        self.black_hole_entry = Gtk.Entry(text=black_hole_name(self.values['black_hole_name']),
+                                         max_length=32, hexpand=True)
+        self.black_hole_entry.update_property([Gtk.AccessibleProperty.LABEL], ['Black-hole display name'])
+        self.black_hole_entry.connect('activate', self._save_black_hole_name)
+        name_row.append(self.black_hole_entry)
+        self.black_hole_save = Gtk.Button(label='Save name')
+        self.black_hole_save.connect('clicked', self._save_black_hole_name)
+        name_row.append(self.black_hole_save)
+        name_box.append(name_row)
+        self.black_hole_status = Gtk.Label(label='Display only; factory-worker identity and history stay the same. '
+            'Up to 32 characters. Leave blank to restore Shared worker.', xalign=0, wrap=True)
+        name_box.append(self.black_hole_status)
+        content.append(name_box)
+
         self._switch(content, "Show wallpaper", "enabled")
         self._switch(content, "Show custom foreground image", "foreground")
         self._switch(content, "Pause all motion", "paused")
@@ -164,6 +189,23 @@ class ControlWindow(Gtk.ApplicationWindow):
         buttons.append(inspect)
         content.append(buttons)
         self._loading = False
+
+    def _save_black_hole_name(self, _widget):
+        name = black_hole_name(self.black_hole_entry.get_text())
+        try:
+            try:
+                current = json.loads(CONFIG_PATH.read_text())
+            except FileNotFoundError:
+                current = {}
+            if not isinstance(current, dict):
+                raise ValueError('Invalid settings')
+            save_settings({**current, 'black_hole_name': name})
+        except (OSError, ValueError, TypeError):
+            self.black_hole_status.set_text('Name could not be saved. Your draft is retained; try again.')
+            return
+        self.values['black_hole_name'] = name
+        self.black_hole_entry.set_text(name)
+        self.black_hole_status.set_text('Display name saved. Agent identity and activity history are unchanged.')
 
     def _update_light_controls(self):
         mode = self.values['agent_mode']

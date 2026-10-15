@@ -102,6 +102,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
                 density: this._clamp(raw.density, DEFAULT_SETTINGS.density),
                 links: raw.links !== false,
                 write_lights: raw.write_lights === true,
+                black_hole_name: raw.black_hole_name,
                 labels: raw.labels !== false,
                 agent_mode: ['orbiting', 'asteroid', 'satellite'].includes(raw.agent_mode) ? raw.agent_mode : 'orbiting',
                 solar_rotation: raw.solar_rotation === true,
