@@ -116,3 +116,49 @@ for (const mode of ['asteroid', 'satellite']) {
     if (!actual.coordinates.flat().every(Number.isFinite)) throw new Error('Single-target scene failed');
 }
 print('agent movement checks passed');
+
+// Independent system spin preserves nested geometry, focus and moving targets.
+const spinLayout = (speed, time, angle = null, selectedFocus = null, mode = 'orbiting') =>
+    layoutScene(movementScene, 0.3, 1200, 800, false, selectedFocus,
+        {solar_rotation: true, solar_rotation_speed: speed, agent_mode: mode}, time, angle);
+const spun = spinLayout(3, 30);
+for (const id of ['host', 'root:Projects', 'root:Other', 'agent:worker']) {
+    if (distance(spun.positions.get(id), legacy.positions.get(id)) > 1e-8)
+        throw new Error('Local spin moved a system center, host or default agent');
+}
+if (distance(spun.positions.get('file:main'), legacy.positions.get('file:main')) < 0.1)
+    throw new Error('Local spin failed to rotate contents');
+const rigid = layoutScene(scene, 0.3, 1200, 800, false, null,
+    {solar_rotation: true}, 40);
+const rigidBase = layoutScene(scene, 0.3, 1200, 800, false);
+for (const [a,b] of [['dir:App','file:main'],['root:Projects','dir:App']]) {
+    if (Math.abs(distance(rigid.positions.get(a),rigid.positions.get(b))-
+                 distance(rigidBase.positions.get(a),rigidBase.positions.get(b))) > 1e-8)
+        throw new Error('Local spin distorted nested orbits');
+}
+if (JSON.stringify(spinLayout(0, 30).coordinates) !== JSON.stringify(legacy.coordinates))
+    throw new Error('Zero speed moved the initial local angle');
+if (JSON.stringify(spinLayout(3, 30).coordinates) !== JSON.stringify(spinLayout(6, 15).coordinates))
+    throw new Error('Local spin did not follow degrees per second');
+if (JSON.stringify(spinLayout(1, 10, 0.8).coordinates) !== JSON.stringify(spinLayout(8, 90, 0.8).coordinates))
+    throw new Error('Speed changes jumped an accumulated angle');
+const spinFocus = layoutScene(scene, 0.3, 1200, 800, true,
+    {kind:'Remembered directory',root:'Projects',path:'/projects/app'}, {solar_rotation:true}, 40);
+if (Math.abs(spinFocus.coordinates[1][0]-1200*0.47)>1e-8 ||
+    hitTest(scene,spinFocus.coordinates,spinFocus.visible,...spinFocus.coordinates[1])?.name!=='App')
+    throw new Error('Spin broke focused folder placement or hit testing');
+let spinTouches = new Set();
+for (let i=0;i<6400;i++) {
+    const actual=spinLayout(3,i*.01,null,null,'asteroid');
+    if (actual.motionLinks.length) throw new Error('Spinning asteroid retained lights');
+    for (const id of ['file:main','file:other'])
+        if(distance(actual.positions.get('agent:worker'),actual.positions.get(id))<1e-8) spinTouches.add(id);
+}
+if(spinTouches.size!==2) throw new Error('Asteroid failed to touch rotating targets');
+const spinSatellite=spinLayout(3,40,null,null,'satellite');
+if(spinSatellite.motionLinks.length!==1 || spinSatellite.motionLinks[0].to!==5)
+    throw new Error('Spin changed satellite target selection');
+const spinWrapBefore=spinLayout(1,0,2*Math.PI-1e-7),spinWrapAfter=spinLayout(1,0,0);
+if(distance(spinWrapBefore.positions.get('file:main'),spinWrapAfter.positions.get('file:main'))>1e-5)
+    throw new Error('Local spin jumped on angle wrap');
+print('independent solar rotation checks passed');

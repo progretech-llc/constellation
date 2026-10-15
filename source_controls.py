@@ -53,6 +53,26 @@ def save_folder_controls(path: Path, roots: list[dict], max_files: int,
         cleaned.append({'label': label, 'path': str(folder)})
     updated = {**current, 'roots': cleaned, 'max_files': max_files,
                'max_directories': max_directories}
+    return _atomic_update(path, original, updated)
+
+
+def save_agent_controls(path: Path, selected: list[str] | None, expected: list[str] | None) -> dict:
+    original = path.read_bytes()
+    current = json.loads(original)
+    if current.get('display_agents') != expected:
+        raise ValueError('Agent selection changed elsewhere. Reload agents before applying.')
+    return _atomic_update(path, original, {**current, 'display_agents': selected})
+
+
+def save_memory_node(path: Path, selected: dict, expected: dict | None) -> dict:
+    original = path.read_bytes()
+    current = json.loads(original)
+    if current.get('memory_node') != expected:
+        raise ValueError('Memory node selection changed elsewhere. Reload before applying.')
+    return _atomic_update(path, original, {**current, 'memory_node': selected})
+
+
+def _atomic_update(path: Path, original: bytes, updated: dict) -> dict:
     temporary = None
     try:
         with tempfile.NamedTemporaryFile('w', dir=path.parent, prefix='.folders-',
@@ -65,7 +85,7 @@ def save_folder_controls(path: Path, roots: list[dict], max_files: int,
             os.fsync(stream.fileno())
         load_config(temporary)
         if path.read_bytes() != original:
-            raise ValueError("Configuration changed while saving. Reload folders and retry.")
+            raise ValueError("Configuration changed while saving. Reload settings and retry.")
         os.replace(temporary, path)
     finally:
         if temporary is not None:

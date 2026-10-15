@@ -17,6 +17,8 @@ from gi.repository import Gio, GLib, Gtk, Pango  # noqa: E402
 
 from config import CONFIG_PATH as SOURCES_PATH, load_config
 from source_controls import editable_values, save_folder_controls
+from agent_controls import AgentPanel
+from memory_controls import MemoryPanel
 
 HERE = Path(__file__).resolve().parent
 CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
@@ -35,6 +37,8 @@ DEFAULT = {
     "labels": True,
     "memory_planets": 20,
     "agent_mode": "orbiting",
+    "solar_rotation": False,
+    "solar_rotation_speed": 1.0,
 }
 
 
@@ -69,10 +73,14 @@ class ControlWindow(Gtk.ApplicationWindow):
         header = Gtk.HeaderBar()
         header.set_title_widget(Gtk.Label(label="Constellation by ProgreTech"))
         self.set_titlebar(header)
-        tabs = Gtk.Notebook(vexpand=True)
+        tabs = Gtk.Notebook(vexpand=True, scrollable=True)
         outer.append(tabs)
         folders = self._folder_page()
         tabs.append_page(folders, Gtk.Label(label="Folders"))
+        self.agent_panel = AgentPanel(SOURCES_PATH, SCENE_PATH, self._refresh_scene)
+        tabs.append_page(self.agent_panel, Gtk.Label(label='Agents'))
+        self.memory_panel = MemoryPanel(SOURCES_PATH, self._refresh_scene)
+        tabs.append_page(self.memory_panel, Gtk.Label(label='Memory Node'))
         tabs.append_page(self._recommendations_page(), Gtk.Label(label="Recommendations"))
         appearance = Gtk.ScrolledWindow(vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
         tabs.append_page(appearance, Gtk.Label(label="Appearance"))
@@ -96,7 +104,7 @@ class ControlWindow(Gtk.ApplicationWindow):
 
         self._switch(content, "Show wallpaper", "enabled")
         self._switch(content, "Show custom foreground image", "foreground")
-        self._switch(content, "Pause rotation", "paused")
+        self._switch(content, "Pause all motion", "paused")
         modes = ('orbiting', 'asteroid', 'satellite')
         movement = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         movement.append(Gtk.Label(label='Agent movement', xalign=0))
@@ -121,7 +129,11 @@ class ControlWindow(Gtk.ApplicationWindow):
         movement.append(selector)
         movement.append(description)
         content.append(movement)
-        self._scale(content, "Rotation · degrees per second", "rotation_speed", 0, 5, 2)
+        self._scale(content, "Galaxy rotation · degrees per second", "rotation_speed", 0, 5, 2)
+        self._switch(content, 'Rotate solar systems independently', 'solar_rotation')
+        self._scale(content, 'Solar-system spin · degrees per second', 'solar_rotation_speed', 0, 10, 2)
+        content.append(Gtk.Label(label='Adds local rotation of folders and files around each system’s center. '
+                                 'Galaxy rotation stays separate; Pause freezes both.', xalign=0, wrap=True))
         self._scale(content, "Nebula glow", "glow", 0, 1, 2)
         self._scale(content, "Light rays", "rays", 0, 1, 2)
         self._scale(content, "Galaxy star density", "density", 0, 1, 2)
@@ -447,7 +459,7 @@ class ControlWindow(Gtk.ApplicationWindow):
             scene = json.loads(SCENE_PATH.read_text())
             age = max(0, int(time.time()) - int(scene["generated_at"]))
             counts = scene["counts"]
-            self.status.set_text(f"{counts['files']} remembered files · {counts.get('memory_planets', 0)} memory planets · {counts['agents']} linked agents · refreshed {age // 60} min ago")
+            self.status.set_text(f"{counts['files']} remembered files · {counts.get('memory_planets', 0)} memory planets · {counts['agents']} displayed agents · refreshed {age // 60} min ago")
         except (OSError, KeyError, TypeError, ValueError):
             self.status.set_text("No valid memory scene yet. Use Refresh memory now to build one.")
 

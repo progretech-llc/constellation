@@ -30,6 +30,8 @@ ROOTS = root_entries(CONFIG)
 def _display_agent(author: str) -> str:
     """Map scene nodes only; Activity.author and memory IDs keep original provenance."""
     agent = CONFIG['agent_aliases'].get(author, author)
+    if agent in (CONFIG.get('display_agents') or []):
+        return agent
     if CONFIG['agents'] and agent not in CONFIG['agents'] and CONFIG['unlisted_agent']:
         return CONFIG['unlisted_agent']
     return agent

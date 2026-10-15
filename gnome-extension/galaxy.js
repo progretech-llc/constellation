@@ -12,6 +12,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
     links: true,
     labels: true,
     agent_mode: 'orbiting',
+    solar_rotation: false,
+    solar_rotation_speed: 1.0,
 });
 
 const TAU = Math.PI * 2;
@@ -148,7 +150,7 @@ function agentMotion(scene, positions, time, mode) {
 }
 
 export function layoutScene(scene, phase, width, height, skyMode, focus = null,
-                            settings = DEFAULT_SETTINGS, time = 0) {
+                            settings = DEFAULT_SETTINGS, time = 0, systemPhase = null) {
     const nodes = scene?.nodes ?? [];
     const bases = new Map(nodes.filter(node => node.id).map(node => [node.id, node]));
     const positions = new Map();
@@ -170,6 +172,20 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null,
             y: movingParent.y + dx * Math.sin(angle) + dy * Math.cos(angle),
             z: movingParent.z + node.z - parent.z,
         });
+    }
+    if (settings.solar_rotation === true) {
+        const speed = Number(settings.solar_rotation_speed ?? DEFAULT_SETTINGS.solar_rotation_speed);
+        const spin = systemPhase ?? -time * (Number.isFinite(speed) ? Math.max(0, Math.min(10, speed)) : 1) * Math.PI / 180;
+        const centers = new Map(nodes.filter(node => node.kind === 'Directory system')
+            .map(node => [node.root, positions.get(node.id)]));
+        for (const node of nodes) {
+            if (['Host', 'Agent', 'Directory system'].includes(node.kind)) continue;
+            const center = centers.get(node.root), point = positions.get(node.id);
+            if (!center || !point) continue;
+            const dx = point.x - center.x, dy = point.y - center.y;
+            positions.set(node.id, {x: center.x + dx * Math.cos(spin) - dy * Math.sin(spin),
+                y: center.y + dx * Math.sin(spin) + dy * Math.cos(spin), z: point.z});
+        }
     }
     const motionLinks = agentMotion(scene ?? {nodes: [], links: []}, positions, time, settings.agent_mode);
     const visible = new Set();
@@ -363,7 +379,7 @@ function attribution(cr, width, height, scene) {
     cr.restore();
 }
 
-export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTINGS, phase = 0, time = 0, foreground = null, focus = null) {
+export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTINGS, phase = 0, time = 0, foreground = null, focus = null, systemPhase = null) {
     const skyMode = settings.foreground !== false && foreground !== null;
     background(cr, width, height, settings, skyMode);
     spiralDust(cr, phase, width, height, settings, skyMode);
@@ -374,7 +390,7 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
         attribution(cr, width, height, null);
         return;
     }
-    const {coordinates, visible, motionLinks} = layoutScene(scene, phase, width, height, skyMode, focus, settings, time);
+    const {coordinates, visible, motionLinks} = layoutScene(scene, phase, width, height, skyMode, focus, settings, time, systemPhase);
     const intensity = Number(settings.glow ?? DEFAULT_SETTINGS.glow);
     if (settings.links !== false) {
         for (let i = 0; i < motionLinks.length; i++) {

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import re
 from pathlib import Path
 
 CONFIG_PATH = Path(os.environ.get('CONSTELLATION_CONFIG', Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'constellation' / 'sources.json'))
@@ -53,6 +54,18 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
         raise ValueError('agent_aliases must map nonempty agent IDs to nonempty agent IDs')
     if not isinstance(fallback, str) or (fallback and (not data['agents'] or fallback not in data['agents'])):
         raise ValueError('unlisted_agent must be one of the configured agents')
+    selected = data.get('display_agents')
+    if selected is not None and (not isinstance(selected, list) or len(selected) > 100 or
+            any(not isinstance(agent, str) or not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}', agent)
+                for agent in selected) or len(selected) != len(set(selected))):
+        raise ValueError('display_agents must be null or up to 100 unique agent IDs')
+    memory_node = data.get('memory_node')
+    if memory_node is not None:
+        if (not isinstance(memory_node, dict) or
+                memory_node.get('provider') not in {'hindsight', 'mem0', 'zep', 'chroma', 'qdrant', 'letta'} or
+                not isinstance(memory_node.get('path', ''), str) or
+                (memory_node.get('path') and not Path(memory_node['path']).is_absolute())):
+            raise ValueError('memory_node must name one supported provider and an optional absolute path')
     return data
 
 

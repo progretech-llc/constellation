@@ -14,6 +14,7 @@ from pathlib import Path
 from app import _build_scene, _project, ROOT_COLORS, AGENT_COLORS
 from memory_map import CONFIG, ROOTS, build_catalog, read_activities
 from hindsight_planets import read_recent, validate_directory
+from memory_discovery import PROVIDERS
 
 
 STATE_HOME = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
@@ -24,6 +25,7 @@ SETTINGS_PATH = Path.home() / '.config/factory-observatory/wallpaper.json'
 def agent_movement_metadata(files: list, nodes: dict) -> list[dict]:
     """Per-agent chronology from the bounded visible catalog, independent of legacy links."""
     indices = {key: index for index, key in enumerate(nodes['id'])}
+    files = [item for item in files if 'file:' + item.path in indices]
     result = []
     for key, agent_index in indices.items():
         if not key.startswith('agent:'):
@@ -48,10 +50,62 @@ def agent_movement_metadata(files: list, nodes: dict) -> list[dict]:
     return result
 
 
-def add_memory_planets(nodes: dict, links: dict) -> dict[str, str]:
+def prepare_memory_node(nodes: dict, links: dict, config: dict) -> tuple[str, Path | None] | None:
+    """Replace the legacy memory slot, never the activity provider or its records."""
+    selection = config.get('memory_node')
+    if selection is None:
+        existing = next(((root['label'], Path(root['path']).expanduser()) for root in config['roots']
+                         if root['label'] == 'Hindsight'), None)
+        if not existing and config['memory']['provider'] != 'hindsight':
+            return None
+        path = str(existing[1]) if existing else ''
+        cli = Path(config['memory'].get('cli', '')).expanduser()
+        if not path and cli.is_file():
+            path = next((str(parent) for parent in list(cli.resolve().parents)[:4]
+                         if (parent / 'config/client.json').is_file()), '')
+        selection = {'provider': 'hindsight', 'path': path}
+    provider = selection['provider']
+    label = PROVIDERS[provider]
+    legacy = [i for i, kind in enumerate(nodes['kind'])
+              if kind == 'Directory system' and nodes['root'][i] in {'Hindsight', 'MemPalace'}]
+    xyz = tuple(nodes[key][legacy[0]] for key in ('bx', 'by', 'bz')) if legacy else (0, -4.5, 0)
+    if provider == 'hindsight' and len(legacy) == 1 and nodes['root'][legacy[0]] == 'Hindsight':
+        index = legacy[0]
+        path = selection.get('path') or nodes['path'][index]
+        nodes['path'][index] = path
+        return 'Hindsight', Path(path) if path else None
+    removed = {i for i, root in enumerate(nodes['root']) if root in {'Hindsight', 'MemPalace'}}
+    retained = [i for i in range(len(nodes['id'])) if i not in removed]
+    remap = {old: new for new, old in enumerate(retained)}
+    kept_links = [i for i, (source, target) in enumerate(zip(links['source_idx'], links['target_idx']))
+                  if source in remap and target in remap]
+    for key in nodes:
+        nodes[key] = [nodes[key][i] for i in retained]
+    for key in links:
+        links[key] = [links[key][i] for i in kept_links]
+    links['source_idx'] = [remap[index] for index in links['source_idx']]
+    links['target_idx'] = [remap[index] for index in links['target_idx']]
+    px, py, depth = _project(*xyz, 0.35)
+    values = {'id': 'root:Hindsight' if provider == 'hindsight' else 'memory-system:' + provider,
+              'orbit_parent': 'host', 'x': px, 'y': py, 'depth': depth,
+              'bx': xyz[0], 'by': xyz[1], 'bz': xyz[2], 'size': 19, 'color': '#a18dff', 'alpha': 0.92,
+              'name': label if provider == 'hindsight' else label + ' · system',
+              'kind': 'Directory system', 'detail': 'Selected memory system', 'action': '', 'memory': '',
+              'path': selection.get('path', ''), 'root': label, 'memory_project': ''}
+    for key in nodes:
+        nodes[key].append(values[key])
+    path = selection.get('path', '')
+    return ('Hindsight', Path(path)) if provider == 'hindsight' and path else None
+
+
+def add_memory_planets(nodes: dict, links: dict, memory_root=None) -> dict[str, str]:
     if CONFIG['memory']['provider'] != 'hindsight':return {}
-    root = next(((label, path) for label, path in ROOTS if label == 'Hindsight'), None)
+    if (CONFIG.get('memory_node') or {}).get('provider', 'hindsight') != 'hindsight':
+        return {}
+    root = memory_root or next(((label, path) for label, path in ROOTS if label == 'Hindsight'), None)
     if root is None:
+        return {}
+    if root[1] is None:
         return {}
     try:
         count = int(json.loads(SETTINGS_PATH.read_text()).get('memory_planets', 20))
@@ -74,7 +128,8 @@ def add_memory_planets(nodes: dict, links: dict) -> dict[str, str]:
         xyz = (center[0] + radius * math.cos(angle), center[1] + radius * math.sin(angle),
                center[2] + 0.18 * math.sin(angle + ring))
         px, py, depth = _project(*xyz, 0.35)
-        color = AGENT_COLORS.get(record.author, ROOT_COLORS[root_label]) if record.author_type == 'agent' and record.author in agents else ROOT_COLORS[root_label]
+        root_color = ROOT_COLORS.get(root_label, '#a18dff')
+        color = AGENT_COLORS.get(record.author, root_color) if record.author_type == 'agent' and record.author in agents else root_color
         key = 'memory:' + record.short_id
         values = {'id': key, 'orbit_parent': root_id, 'x': px, 'y': py, 'depth': depth,
                   'bx': xyz[0], 'by': xyz[1], 'bz': xyz[2], 'size': 6.2, 'color': color,
@@ -98,7 +153,10 @@ def make_scene() -> dict:
     activities = read_activities()
     files, active_agents = build_catalog(activities)
     nodes, _, links, _ = _build_scene(files, active_agents)
-    planet_authors = add_memory_planets(nodes, links)
+    memory_root = prepare_memory_node(nodes, links, CONFIG)
+    planet_authors = add_memory_planets(nodes, links, memory_root)
+    visible_file_ids = set(nodes['id'])
+    files = [item for item in files if 'file:' + item.path in visible_file_ids]
     planet_ranks = {key: index + 1 for index, key in enumerate(planet_authors)}
     compact_nodes = [
         {
@@ -138,10 +196,13 @@ def make_scene() -> dict:
             "agent": CONFIG["memory"].get("agent", ""),
             "browser_script": str(Path(__file__).with_name("memory_browser.py")),
         },
-        "counts": {"activities": len(activities), "files": len(files), "directories": len({item.directory for item in files}), "agents": len(active_agents), "memory_planets": len(planet_authors)},
+        "counts": {"activities": len(activities), "files": len(files), "directories": len({item.directory for item in files}), "agents": sum(node['kind'] == 'Agent' for node in compact_nodes), "memory_planets": len(planet_authors)},
         "nodes": compact_nodes,
         "links": compact_links,
         "agent_activity": agent_movement_metadata(files, nodes),
+        "available_agents": list(dict.fromkeys([*CONFIG.get('agents', []), *active_agents])),
+        "memory_node": CONFIG.get('memory_node') or {'provider': 'hindsight'
+                          if memory_root or 'root:Hindsight' in nodes['id'] else None},
     }
 
 

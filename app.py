@@ -69,6 +69,8 @@ def _project(x: float, y: float, z: float, angle: float) -> tuple[float, float, 
 
 def _build_scene(files, active_agents):
     author_order = list(dict.fromkeys([*ACTIVE_ROLES, *sorted(set(active_agents) - set(ACTIVE_ROLES))]))
+    if CONFIG.get('display_agents') is not None:
+        author_order = list(CONFIG['display_agents'])
     nodes = {key: [] for key in ("id", "orbit_parent", "x", "y", "depth", "bx", "by", "bz", "size", "color", "alpha", "name", "kind", "detail", "action", "memory", "path", "root", "memory_project")}
     labels = {key: [] for key in ("x", "y", "bx", "by", "bz", "text", "color", "kind")}
     node_index: dict[str, int] = {}
@@ -145,6 +147,8 @@ def _build_scene(files, active_agents):
 
     links = {key: [] for key in ("xs", "ys", "source_idx", "target_idx", "color", "alpha", "size")}
     for agent, file_path, action in recent_links(files, active_agents):
+        if 'agent:' + agent not in node_index:
+            continue
         source_idx, target_idx = node_index["agent:" + agent], node_index["file:" + file_path]
         for column, value in {
             "xs": [nodes["x"][source_idx], nodes["x"][target_idx]],
