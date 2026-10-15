@@ -21,6 +21,33 @@ SCENE_PATH = STATE_HOME / "factory-observatory" / "scene.json"
 SETTINGS_PATH = Path.home() / '.config/factory-observatory/wallpaper.json'
 
 
+def agent_movement_metadata(files: list, nodes: dict) -> list[dict]:
+    """Per-agent chronology from the bounded visible catalog, independent of legacy links."""
+    indices = {key: index for index, key in enumerate(nodes['id'])}
+    result = []
+    for key, agent_index in indices.items():
+        if not key.startswith('agent:'):
+            continue
+        agent = key.removeprefix('agent:')
+        touched = sorted((item for item in files if agent in item.agent_ranks),
+                         key=lambda item: (item.agent_ranks[agent], item.path))
+        written = sorted((item for item in files if agent in item.agent_write_ranks),
+                         key=lambda item: (item.agent_write_ranks[agent], item.path))
+        last_root = written[0].root if written else None
+        modified_targets = []
+        for item in [item for item in written if item.root == last_root][:7]:
+            file_index = indices['file:' + item.path]
+            modified_targets.append(file_index)
+            parent = nodes.get('orbit_parent', [''] * len(nodes['id']))[file_index]
+            if parent.startswith('dir:') and parent in indices:
+                modified_targets.append(indices[parent])
+        result.append({'agent': agent_index,
+                       'targets': [indices['file:' + item.path] for item in touched[:7]],
+                       'last_modified_root': indices.get('root:' + last_root) if last_root else None,
+                       'modified_targets': list(dict.fromkeys(modified_targets))})
+    return result
+
+
 def add_memory_planets(nodes: dict, links: dict) -> dict[str, str]:
     if CONFIG['memory']['provider'] != 'hindsight':return {}
     root = next(((label, path) for label, path in ROOTS if label == 'Hindsight'), None)
@@ -114,6 +141,7 @@ def make_scene() -> dict:
         "counts": {"activities": len(activities), "files": len(files), "directories": len({item.directory for item in files}), "agents": len(active_agents), "memory_planets": len(planet_authors)},
         "nodes": compact_nodes,
         "links": compact_links,
+        "agent_activity": agent_movement_metadata(files, nodes),
     }
 
 

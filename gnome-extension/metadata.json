@@ -3,5 +3,5 @@
   "name": "Constellation by ProgreTech",
   "description": "An animated GNOME memory galaxy for your agents and directory roots.",
   "shell-version": ["50"],
-  "version": 5
+  "version": 7
 }

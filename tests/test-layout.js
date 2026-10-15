@@ -60,3 +60,59 @@ if (distance(start.positions.get('agent:worker'), moved.positions.get('agent:wor
 if (hitTest(hostScene, start.coordinates, start.visible, ...start.coordinates[0])?.kind !== 'Host')
     throw new Error('Central galaxy directory cannot be selected');
 print('focus layout checks passed');
+
+const movementScene = {
+    ...hostScene,
+    nodes: [...hostScene.nodes,
+        {id: 'root:Other', kind: 'Directory system', root: 'Other', x: -4, y: 1, z: 0},
+        {id: 'file:other', kind: 'Remembered file', orbit_parent: 'root:Other', root: 'Other', x: -3.5, y: 1, z: 0}],
+    agent_activity: [{agent: 2, targets: [3, 5], last_modified_root: 4, modified_targets: [5, 3]}],
+};
+const layoutMode = (mode, time, selectedFocus = null, angle = 0.3) =>
+    layoutScene(movementScene, angle, 1200, 800, false, selectedFocus, {agent_mode: mode}, time);
+const legacy = layoutScene(movementScene, 0.3, 1200, 800, false);
+for (const mode of ['orbiting', 'invalid']) {
+    const actual = layoutMode(mode, 30);
+    if (JSON.stringify(actual.coordinates) !== JSON.stringify(legacy.coordinates))
+        throw new Error('Default layout changed');
+    if (actual.motionLinks !== movementScene.links) throw new Error('Default links changed');
+}
+const satellite = layoutMode('satellite', 1);
+if (satellite.motionLinks.length !== 1 || satellite.motionLinks[0].to !== 5)
+    throw new Error('Satellite links escaped its latest modified system');
+const satRadius = distance(satellite.positions.get('agent:worker'), satellite.positions.get('root:Other'));
+const satelliteLater = layoutMode('satellite', 5);
+if (satRadius < 0.7 || satRadius > 1.5 ||
+    Math.abs(satRadius - distance(satelliteLater.positions.get('agent:worker'), satelliteLater.positions.get('root:Other'))) > 1e-6)
+    throw new Error('Satellite failed to stay in system orbit');
+const unrelatedFocus = {kind: 'Directory system', name: 'Projects', root: 'Projects', path: '/galaxy/projects'};
+if (layoutMode('satellite', 5, unrelatedFocus).visible.has(2))
+    throw new Error('Satellite appeared in an unrelated focused system');
+let touched = new Set();
+let previousAgent = null;
+for (let i = 0; i < 6400; i++) {
+    const actual = layoutMode('asteroid', i * 0.01);
+    if (actual.motionLinks.length !== 0) throw new Error('Asteroid retained lines or bouncing lights');
+    const point = actual.positions.get('agent:worker');
+    if (![point.x, point.y, point.z].every(Number.isFinite)) throw new Error('Non-finite asteroid coordinate');
+    if (previousAgent && distance(point, previousAgent) > 0.06) throw new Error('Asteroid jumped across a route boundary');
+    for (const id of ['file:main', 'file:other']) {
+        if (distance(point, actual.positions.get(id)) < 1e-8) touched.add(id);
+    }
+    previousAgent = point;
+}
+if (touched.size !== 2) throw new Error('Asteroid did not touch every remembered target');
+for (const mode of ['asteroid', 'satellite']) {
+    const before = layoutMode(mode, 4, null, 2 * Math.PI - 1e-6);
+    const after = layoutMode(mode, 4, null, 0);
+    if (distance(before.positions.get('agent:worker'), after.positions.get('agent:worker')) > 0.001)
+        throw new Error('Movement mode jumped when phase wrapped');
+    const quietScene = {...movementScene, agent_activity: []};
+    const quiet = layoutScene(quietScene, 0.3, 1200, 800, false, null, {agent_mode: mode}, 40);
+    if (distance(quiet.positions.get('agent:worker'), legacy.positions.get('agent:worker')) > 1e-8)
+        throw new Error('Agent without remembered targets lost its default orbit');
+    const single = {...movementScene, agent_activity: [{agent: 2, targets: [3]}]};
+    const actual = layoutScene(single, 0.3, 1200, 800, false, null, {agent_mode: mode}, 40);
+    if (!actual.coordinates.flat().every(Number.isFinite)) throw new Error('Single-target scene failed');
+}
+print('agent movement checks passed');

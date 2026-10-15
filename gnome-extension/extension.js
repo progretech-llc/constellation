@@ -97,6 +97,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
                 density: this._clamp(raw.density, DEFAULT_SETTINGS.density),
                 links: raw.links !== false,
                 labels: raw.labels !== false,
+                agent_mode: ['orbiting', 'asteroid', 'satellite'].includes(raw.agent_mode) ? raw.agent_mode : 'orbiting',
             };
         } catch (_error) {
             this._settings = {...DEFAULT_SETTINGS};
@@ -170,7 +171,8 @@ export default class FactoryObservatoryWallpaper extends Extension {
         for (const area of this._areas) {
             if (x < area.x || y < area.y || x >= area.x + area.width || y >= area.y + area.height) continue;
             const skyMode = this._settings.foreground !== false && this._foreground !== null;
-            const {coordinates, visible} = layoutScene(this._scene, this._phase, area.width, area.height, skyMode, this._focus);
+            const {coordinates, visible} = layoutScene(this._scene, this._phase, area.width, area.height,
+                skyMode, this._focus, this._settings, this._motionTime);
             return hitTest(this._scene, coordinates, visible, x - area.x, y - area.y);
         }
         return null;

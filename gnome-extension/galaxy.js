@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
     density: 0.72,
     links: true,
     labels: true,
+    agent_mode: 'orbiting',
 });
 
 const TAU = Math.PI * 2;
@@ -71,7 +72,83 @@ function project(x, y, z, phase, width, height, skyMode) {
         height * (skyMode ? 0.265 : 0.5) + ry * scale * (skyMode ? 0.43 : 0.77) + z * scale * 0.11];
 }
 
-export function layoutScene(scene, phase, width, height, skyMode, focus = null) {
+function agentSeed(id) {
+    let hash = 2166136261;
+    for (const character of id) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+    return (hash >>> 0) / 4294967296;
+}
+
+function mixPoint(a, b, fraction) {
+    const t = fraction * fraction * (3 - 2 * fraction);
+    return {x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t,
+        z: a.z + (b.z - a.z) * t};
+}
+
+function agentMotion(scene, positions, time, mode) {
+    if (!['asteroid', 'satellite'].includes(mode)) return scene.links ?? [];
+    const nodes = scene.nodes;
+    const bases = new Map(nodes.map(node => [node.id, node]));
+    const satelliteLinks = [];
+    for (const activity of scene.agent_activity ?? []) {
+        const agent = nodes[activity.agent];
+        if (agent?.kind !== 'Agent') continue;
+        const seed = agentSeed(agent.id);
+        if (mode === 'satellite') {
+            const system = nodes[activity.last_modified_root];
+            if (system?.kind !== 'Directory system') continue;
+            const center = positions.get(system.id);
+            if (!center) continue;
+            const angle = seed * TAU - time * 0.28;
+            const radius = 0.8 + seed * 0.6;
+            positions.set(agent.id, {x: center.x + radius * Math.cos(angle),
+                y: center.y + radius * Math.sin(angle), z: center.z + 0.25});
+            for (const target of activity.modified_targets ?? []) {
+                if (nodes[target]?.root === system.root)
+                    satelliteLinks.push({from: activity.agent, to: target, color: agent.color});
+            }
+            continue;
+        }
+        const targets = (activity.targets ?? []).filter(index =>
+            ['Remembered file', 'Remembered directory', 'Directory system'].includes(nodes[index]?.kind) &&
+            positions.has(nodes[index].id));
+        if (!targets.length) continue;
+        // Each leg approaches a folder orbit, loops near it, touches its target,
+        // and pauses briefly before departing. Endpoints track the moving scene.
+        const clock = Math.max(0, time) / 16 + seed * targets.length;
+        const step = Math.floor(clock);
+        const t = clock - step;
+        const target = nodes[targets[step % targets.length]];
+        const previous = nodes[targets[(step + targets.length - 1) % targets.length]];
+        const destination = positions.get(target.id);
+        const start = positions.get(previous.id);
+        const parentNode = bases.get(target.orbit_parent);
+        const parent = positions.get(parentNode?.id) ?? destination;
+        const radius = Math.max(0.45, Math.min(1.3,
+            Math.hypot(destination.x - parent.x, destination.y - parent.y) + 0.22));
+        const initialAngle = Math.atan2(destination.y - parent.y, destination.x - parent.x) + 0.6;
+        const orbit = amount => ({x: parent.x + radius * Math.cos(initialAngle - amount * TAU),
+            y: parent.y + radius * Math.sin(initialAngle - amount * TAU), z: parent.z + 0.18});
+        let position;
+        if (t < 0.4) {
+            position = mixPoint(start, orbit(0), t / 0.4);
+            const bend = Math.sin(Math.PI * t / 0.4) ** 2 * 0.45;
+            position.x += bend * Math.cos(seed * TAU);
+            position.y += bend * Math.sin(seed * TAU);
+        } else if (t < 0.75) {
+            const u = (t - 0.4) / 0.35;
+            position = orbit(0.8 * u * u * (3 - 2 * u));
+        } else if (t < 0.95) {
+            position = mixPoint(orbit(0.8), destination, (t - 0.75) / 0.2);
+        } else {
+            position = {...destination};
+        }
+        positions.set(agent.id, position);
+    }
+    return mode === 'asteroid' ? [] : satelliteLinks;
+}
+
+export function layoutScene(scene, phase, width, height, skyMode, focus = null,
+                            settings = DEFAULT_SETTINGS, time = 0) {
     const nodes = scene?.nodes ?? [];
     const bases = new Map(nodes.filter(node => node.id).map(node => [node.id, node]));
     const positions = new Map();
@@ -94,6 +171,7 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null) 
             z: movingParent.z + node.z - parent.z,
         });
     }
+    const motionLinks = agentMotion(scene ?? {nodes: [], links: []}, positions, time, settings.agent_mode);
     const visible = new Set();
     if (!focus) {
         nodes.forEach((_, index) => visible.add(index));
@@ -108,7 +186,10 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null) 
                 visible.add(index);
             }
         });
-        for (const link of scene.links ?? []) {
+        const focusLinks = settings.agent_mode === 'satellite' ? motionLinks :
+            settings.agent_mode === 'asteroid' ? (scene.agent_activity ?? []).flatMap(activity =>
+                (activity.targets ?? []).map(to => ({from: activity.agent, to}))) : scene.links ?? [];
+        for (const link of focusLinks) {
             if (visible.has(link.to)) visible.add(link.from);
         }
     }
@@ -124,7 +205,7 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null) 
         return [base[0] + (point[0] - base[0]) * zoom,
             base[1] + (point[1] - base[1]) * zoom];
     });
-    return {coordinates, visible, positions};
+    return {coordinates, visible, positions, motionLinks};
 }
 
 export function hitTest(scene, coordinates, visible, x, y) {
@@ -293,14 +374,15 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
         attribution(cr, width, height, null);
         return;
     }
-    const {coordinates, visible} = layoutScene(scene, phase, width, height, skyMode, focus);
+    const {coordinates, visible, motionLinks} = layoutScene(scene, phase, width, height, skyMode, focus, settings, time);
     const intensity = Number(settings.glow ?? DEFAULT_SETTINGS.glow);
-    if (settings.links !== false && Array.isArray(scene.links)) {
-        for (let i = 0; i < scene.links.length; i++) {
-            const link = scene.links[i];
+    if (settings.links !== false) {
+        for (let i = 0; i < motionLinks.length; i++) {
+            const link = motionLinks[i];
             const a = coordinates[link.from], b = coordinates[link.to];
             if (!a || !b || !visible.has(link.from) || !visible.has(link.to)) continue;
             line(cr, ...a, ...b, link.color, 0.22, 0.9);
+            if (settings.agent_mode === 'satellite') continue;
             const direction = ((time * 0.24 + i * 0.127) % 2);
             const t = direction <= 1 ? direction : 2 - direction;
             const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
