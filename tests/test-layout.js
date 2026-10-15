@@ -130,13 +130,14 @@ if (distance(spun.positions.get('file:main'), legacy.positions.get('file:main'))
     throw new Error('Local spin failed to rotate contents');
 const rigid = layoutScene(scene, 0.3, 1200, 800, false, null,
     {solar_rotation: true}, 40);
-const rigidBase = layoutScene(scene, 0.3, 1200, 800, false);
+const rigidBase = layoutScene(scene, 0, 1200, 800, false);
 for (const [a,b] of [['dir:App','file:main'],['root:Projects','dir:App']]) {
     if (Math.abs(distance(rigid.positions.get(a),rigid.positions.get(b))-
                  distance(rigidBase.positions.get(a),rigidBase.positions.get(b))) > 1e-8)
         throw new Error('Local spin distorted nested orbits');
 }
-if (JSON.stringify(spinLayout(0, 30).coordinates) !== JSON.stringify(legacy.coordinates))
+const zeroSpin=spinLayout(0,30), initialSpin=spinLayout(0,0);
+if(JSON.stringify(zeroSpin.coordinates)!==JSON.stringify(initialSpin.coordinates))
     throw new Error('Zero speed moved the initial local angle');
 if (JSON.stringify(spinLayout(3, 30).coordinates) !== JSON.stringify(spinLayout(6, 15).coordinates))
     throw new Error('Local spin did not follow degrees per second');
@@ -162,3 +163,67 @@ const spinWrapBefore=spinLayout(1,0,2*Math.PI-1e-7),spinWrapAfter=spinLayout(1,0
 if(distance(spinWrapBefore.positions.get('file:main'),spinWrapAfter.positions.get('file:main'))>1e-5)
     throw new Error('Local spin jumped on angle wrap');
 print('independent solar rotation checks passed');
+
+const sharedScene = {
+    ...movementScene,
+    nodes: [...movementScene.nodes, {id:'agent:factory-worker',kind:'Agent',root:'',x:2,y:2,z:0,color:'#999999'}],
+    links: [...movementScene.links,{from:6,to:3,color:'#999999'}],
+    agent_activity: [{agent:2,targets:[3,5],write_targets:[3],last_modified_root:4,modified_targets:[5]},
+                     {agent:6,targets:[3,5],write_targets:[5],last_modified_root:4,modified_targets:[5]}],
+};
+const sharedLayout=(mode,time,phase=0.3,focus=null) => layoutScene(sharedScene,phase,1200,800,false,focus,
+    {agent_mode:mode,solar_rotation:true},time);
+const fixed=sharedLayout('orbiting',0).coordinates[6];
+for (const mode of ['orbiting','asteroid','satellite']) {
+    for (const phase of [0,1,4]) {
+        const layout=sharedLayout(mode,47,phase,unrelatedFocus);
+        if(JSON.stringify(layout.coordinates[6])!==JSON.stringify(fixed)) throw new Error('Shared worker roamed');
+        if(layout.motionLinks.some(link=>link.from===6)) throw new Error('Shared worker retained outgoing lines');
+        if(!layout.visible.has(6)) throw new Error('Shared worker lost related focus');
+    }
+}
+const {activityLights}=await import('../gnome-extension/galaxy.js');
+for (const mode of ['orbiting','asteroid','satellite']) {
+    let arrivals=0;
+    for(let i=0;i<1200;i++) {
+        const time=i*.02,layout=sharedLayout(mode,time);
+        const lights=activityLights(sharedScene,layout,{agent_mode:mode,write_lights:true},time);
+        if(lights.length>4) throw new Error('Unbounded effects');
+        for(const light of lights) {
+            if(![light.x,light.y,light.alpha,light.radius].every(Number.isFinite)) throw new Error('Invalid light');
+            if(light.kind==='inward' && (light.to!==6 || ![3,5].includes(light.from)))
+                throw new Error('Shared worker sent a file outward');
+            if(light.kind==='write') {
+                if(mode==='satellite' || light.from!==2 || light.to!==3) throw new Error('Write light used a read-only target or wrong mode');
+                if(light.arrival>0) arrivals++;
+            }
+        }
+        if(activityLights(sharedScene,layout,{agent_mode:mode,write_lights:false},time).some(l=>l.kind==='write'))
+            throw new Error('Disabled write lights still emitted');
+    }
+    if(mode!=='satellite' && !arrivals) throw new Error('Write light never illuminated a tiny file planet');
+}
+const hidden=sharedLayout('asteroid',1);
+hidden.visible.delete(6);hidden.visible.delete(2);
+if(activityLights(sharedScene,hidden,{agent_mode:'asteroid',write_lights:true},1).length)
+    throw new Error('Hidden agents emitted lights');
+const older={...sharedScene,agent_activity:[{agent:2,targets:[3]}]};
+if(activityLights(older,sharedLayout('orbiting',1),{write_lights:true},1).length)
+    throw new Error('Legacy read references were invented as writes');
+print('shared-worker anchor and one-way recorded-write lights checks passed');
+
+// Solar direction is screen-relative and independent of galaxy rotation speed.
+const directionLayout=(clockwise,time,phase=0)=>layoutScene(hostScene,phase,1200,800,false,null,
+    {solar_rotation:true,solar_rotation_speed:1,solar_clockwise:clockwise},time);
+for(const phase of [0,0.6,2.5]) {
+    const ccw=directionLayout(false,45,phase),cw=directionLayout(true,45,phase);
+    if(ccw.coordinates[3][1]>=ccw.coordinates[1][1]) throw new Error('Default solar spin is not counterclockwise');
+    if(cw.coordinates[3][1]<=cw.coordinates[1][1]) throw new Error('Clockwise spin was overridden by galaxy rotation');
+    const held=directionLayout(false,0,phase);
+    if(Math.abs(held.coordinates[3][1]-held.coordinates[1][1])>1e-8) throw new Error('Zero local phase inherited galaxy spin');
+}
+const fixedAngle=(clockwise)=>layoutScene(hostScene,.7,1200,800,false,null,
+    {solar_rotation:true,solar_rotation_speed:4,solar_clockwise:clockwise},200,1.2);
+if(JSON.stringify(fixedAngle(true).coordinates)!==JSON.stringify(fixedAngle(false).coordinates))
+    throw new Error('Changing direction reset the accumulated phase');
+print('counterclockwise default and independent direction checks passed');

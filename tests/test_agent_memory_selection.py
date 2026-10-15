@@ -186,3 +186,14 @@ class DiscoveryTests(unittest.TestCase):
             self.assertFalse(systems['qdrant']['records_supported'])
             self.assertEqual(systems['qdrant']['path'],'')
             self.assertEqual(config['memory']['provider'],'hindsight')
+
+class WriteMetadataTests(unittest.TestCase):
+    def test_write_targets_use_per_agent_writes_not_reads_or_other_authors(self):
+        import wallpaper_scene
+        files=[SimpleNamespace(path=f'/project/{i}.py',root='Project',agent_ranks={'lead':i},
+                               agent_write_ranks=({'lead':i} if i%2==0 else {'other':i})) for i in range(20)]
+        nodes={'id':['agent:lead','root:Project',*[f'file:{f.path}' for f in files]],
+               'orbit_parent':['','',*['root:Project']*20]}
+        activity=wallpaper_scene.agent_movement_metadata(files,nodes)[0]
+        self.assertEqual(activity['write_targets'],[2,4,6,8,10,12,14])
+        self.assertEqual(len(activity['targets']),7)

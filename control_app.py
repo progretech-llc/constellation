@@ -39,6 +39,8 @@ DEFAULT = {
     "agent_mode": "orbiting",
     "solar_rotation": False,
     "solar_rotation_speed": 1.0,
+    "solar_clockwise": False,
+    "write_lights": False,
 }
 
 
@@ -124,21 +126,27 @@ class ControlWindow(Gtk.ApplicationWindow):
             index = widget.get_selected()
             self._set('agent_mode', modes[index])
             description.set_text(explanations[index])
-            self.links_switch.set_sensitive(index != 1)
+            self._update_light_controls()
         selector.connect('notify::selected', mode_changed)
         movement.append(selector)
         movement.append(description)
         content.append(movement)
+        self.write_switch = self._switch(content, 'Write lights · no connecting lines', 'write_lights')
+        self.write_switch.connect('notify::active', lambda *_args: self._update_light_controls())
+        content.append(Gtk.Label(label='Orbiting and Asteroid: replay recorded writes as one-way lights to tiny file planets. '
+            'An arrival briefly lights the file; it does not create a duplicate or indicate a live write. '
+            'Replaces the original orbiting lines and bouncing lights while enabled.', xalign=0, wrap=True))
         self._scale(content, "Galaxy rotation · degrees per second", "rotation_speed", 0, 5, 2)
         self._switch(content, 'Rotate solar systems independently', 'solar_rotation')
         self._scale(content, 'Solar-system spin · degrees per second', 'solar_rotation_speed', 0, 10, 2)
-        content.append(Gtk.Label(label='Adds local rotation of folders and files around each system’s center. '
+        self._switch(content, 'Spin clockwise', 'solar_clockwise')
+        content.append(Gtk.Label(label='Counterclockwise by default. Controls folders and files around each system’s center. '
                                  'Galaxy rotation stays separate; Pause freezes both.', xalign=0, wrap=True))
         self._scale(content, "Nebula glow", "glow", 0, 1, 2)
         self._scale(content, "Light rays", "rays", 0, 1, 2)
         self._scale(content, "Galaxy star density", "density", 0, 1, 2)
         self.links_switch = self._switch(content, "Agent connection lines / orbiting lights", "links")
-        self.links_switch.set_sensitive(selector.get_selected() != 1)
+        self._update_light_controls()
         self._switch(content, "Directory and agent labels", "labels")
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         row.append(Gtk.Label(label="Recent Hindsight planets", xalign=0, hexpand=True))
@@ -156,6 +164,11 @@ class ControlWindow(Gtk.ApplicationWindow):
         buttons.append(inspect)
         content.append(buttons)
         self._loading = False
+
+    def _update_light_controls(self):
+        mode = self.values['agent_mode']
+        self.write_switch.set_sensitive(mode != 'satellite')
+        self.links_switch.set_sensitive(mode != 'asteroid' and not (mode == 'orbiting' and self.values['write_lights']))
 
     def _recommendations_page(self) -> Gtk.Widget:
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)

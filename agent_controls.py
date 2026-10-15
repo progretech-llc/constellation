@@ -82,7 +82,8 @@ class AgentPanel(Gtk.Box):
         self.checks = {}
         for agent, item in sorted(self.candidates.items()):
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-            check = Gtk.CheckButton(label=f"{item['name']} · {agent}")
+            name = 'Shared worker · black hole' if agent == 'factory-worker' else item['name']
+            check = Gtk.CheckButton(label=f"{name} · {agent}")
             check.set_active(agent in self.selection)
             check.connect('toggled', self._toggled, agent)
             self.checks[agent] = check
@@ -90,6 +91,10 @@ class AgentPanel(Gtk.Box):
             detail = Gtk.Label(label='; '.join(item['sources']), xalign=0, wrap=True)
             detail.add_css_class('dim-label')
             box.append(detail)
+            if agent == 'factory-worker':
+                box.append(Gtk.Label(label='Shared identity for clients without a named role. '
+                    'Recorded activity, not a live-worker status. Fixed black hole with inward-only file lights.',
+                    xalign=0, wrap=True))
             self.items.append(box)
         if self.sources:
             label = Gtk.Label(label='Detected gateways and clients', xalign=0)

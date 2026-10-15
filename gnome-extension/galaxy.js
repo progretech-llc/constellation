@@ -14,9 +14,15 @@ export const DEFAULT_SETTINGS = Object.freeze({
     agent_mode: 'orbiting',
     solar_rotation: false,
     solar_rotation_speed: 1.0,
+    solar_clockwise: false,
+    write_lights: false,
 });
 
 const TAU = Math.PI * 2;
+
+function sharedWorker(node) {
+    return node?.kind === 'Agent' && (node.display_role === 'shared-worker' || node.id === 'agent:factory-worker');
+}
 
 export function advancePhase(phase, elapsed, degreesPerSecond) {
     return (phase - elapsed * degreesPerSecond * Math.PI / 180 + TAU) % TAU;
@@ -87,13 +93,16 @@ function mixPoint(a, b, fraction) {
 }
 
 function agentMotion(scene, positions, time, mode) {
-    if (!['asteroid', 'satellite'].includes(mode)) return scene.links ?? [];
+    const links = scene.links ?? [];
+    if (!['asteroid', 'satellite'].includes(mode))
+        return links.some(link => sharedWorker(scene.nodes[link.from])) ?
+            links.filter(link => !sharedWorker(scene.nodes[link.from])) : links;
     const nodes = scene.nodes;
     const bases = new Map(nodes.map(node => [node.id, node]));
     const satelliteLinks = [];
     for (const activity of scene.agent_activity ?? []) {
         const agent = nodes[activity.agent];
-        if (agent?.kind !== 'Agent') continue;
+        if (agent?.kind !== 'Agent' || sharedWorker(agent)) continue;
         const seed = agentSeed(agent.id);
         if (mode === 'satellite') {
             const system = nodes[activity.last_modified_root];
@@ -165,7 +174,8 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null,
         // Integer multiples keep orbits continuous when the scene phase wraps at 2π.
         const speed = node.kind === 'Remembered file' ? 3 :
             node.kind === 'Directory system' ? 0 : 1;
-        const angle = phase * speed;
+        // Independent solar controls replace inherited local orbits while enabled.
+        const angle = settings.solar_rotation === true && node.kind !== 'Agent' ? 0 : phase * speed;
         const dx = node.x - parent.x, dy = node.y - parent.y;
         positions.set(node.id, {
             x: movingParent.x + dx * Math.cos(angle) - dy * Math.sin(angle),
@@ -175,7 +185,11 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null,
     }
     if (settings.solar_rotation === true) {
         const speed = Number(settings.solar_rotation_speed ?? DEFAULT_SETTINGS.solar_rotation_speed);
-        const spin = systemPhase ?? -time * (Number.isFinite(speed) ? Math.max(0, Math.min(10, speed)) : 1) * Math.PI / 180;
+        const direction = settings.solar_clockwise === true ? -1 : 1;
+        const localPhase = systemPhase ?? -time * (Number.isFinite(speed) ? Math.max(0, Math.min(10, speed)) : 1) * direction * Math.PI / 180;
+        // Cancel the global projection's angle for relative planet positions so
+        // slow clockwise spin cannot be overpowered by galaxy counterclockwise spin.
+        const spin = localPhase - phase;
         const centers = new Map(nodes.filter(node => node.kind === 'Directory system')
             .map(node => [node.root, positions.get(node.id)]));
         for (const node of nodes) {
@@ -208,6 +222,10 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null,
         for (const link of focusLinks) {
             if (visible.has(link.to)) visible.add(link.from);
         }
+        for (const activity of scene.agent_activity ?? []) {
+            if (sharedWorker(nodes[activity.agent]) && (activity.targets ?? []).some(i => visible.has(i)))
+                visible.add(activity.agent);
+        }
     }
     const anchorNode = focus ? nodes.find(node => node.kind === focus.kind &&
         node.root === focus.root && node.path === focus.path) : null;
@@ -215,6 +233,8 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null,
     const zoom = focus ? (focus.kind === 'Directory system' ? 1.9 : 2.6) : 1;
     const base = project(0, 0, 0, phase, width, height, skyMode);
     const coordinates = nodes.map(node => {
+        // Screen anchor stays still through galaxy/local rotation and focus zoom.
+        if (sharedWorker(node)) return [Math.max(110, width - 120), Math.max(88, height * 0.15)];
         const position = positions.get(node.id) ?? node;
         const point = project(position.x - (anchor?.x ?? 0), position.y - (anchor?.y ?? 0),
             position.z - (anchor?.z ?? 0), phase, width, height, skyMode);
@@ -222,6 +242,83 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null,
             base[1] + (point[1] - base[1]) * zoom];
     });
     return {coordinates, visible, positions, motionLinks};
+}
+
+// Bounded visual replays of reviewed activity, never synthetic filesystem events.
+export function activityLights(scene, layout, settings, time) {
+    const lights = [];
+    const {coordinates, visible} = layout;
+    for (const activity of scene.agent_activity ?? []) {
+        const agent = scene.nodes[activity.agent];
+        if (!agent || !visible.has(activity.agent)) continue;
+        const inward = sharedWorker(agent);
+        if (!inward && !(settings.write_lights === true && ['orbiting', 'asteroid'].includes(settings.agent_mode ?? 'orbiting')))
+            continue;
+        const targets = [...new Set(inward ? activity.targets ?? [] : activity.write_targets ?? [])]
+            .filter(i => scene.nodes[i]?.kind === 'Remembered file' && visible.has(i)).slice(0, 7);
+        if (!targets.length) continue;
+        const lanes = inward ? Math.min(3, targets.length) : 1;
+        for (let lane = 0; lane < lanes; lane++) {
+            const clock = Math.max(0, time) / (inward ? 9 : 6) + agentSeed(agent.id) + lane / lanes;
+            const step = Math.floor(clock), fraction = clock - step;
+            const target = targets[(step + lane) % targets.length];
+            const from = inward ? target : activity.agent, to = inward ? activity.agent : target;
+            const a = coordinates[from], b = coordinates[to];
+            if (!a || !b) continue;
+            const progress = Math.min(1, fraction / 0.82);
+            const eased = progress * progress * (3 - 2 * progress);
+            const arrival = !inward && fraction >= 0.82 ? Math.sin((fraction - 0.82) / 0.18 * Math.PI) : 0;
+            lights.push({kind: inward ? 'inward' : 'write', from, to, target, progress,
+                x: a[0] + (b[0] - a[0]) * eased, y: a[1] + (b[1] - a[1]) * eased,
+                alpha: progress < 1 ? Math.min(1, progress * 8, (1 - progress) * 8) : 0,
+                radius: inward ? 3.6 * (1 - eased) + 0.5 : 1.8,
+                arrival, color: inward ? '#b5a0e2' : agent.color});
+        }
+    }
+    return lights;
+}
+
+function drawActivityLights(cr, lights, intensity) {
+    for (const light of lights) {
+        if (light.alpha > 0) {
+            glow(cr, light.x, light.y, 10, light.color, light.alpha * 0.36 * intensity);
+            source(cr, light.color, light.alpha * 0.9);
+            cr.setLineWidth(1.1);
+            cr.arc(light.x, light.y, light.radius, 0, TAU);
+            cr.stroke();
+            if (light.kind === 'write') circle(cr, light.x, light.y, 0.8, '#effaff', light.alpha);
+        }
+        if (light.arrival > 0) {
+            glow(cr, light.x, light.y, 12, light.color, light.arrival * 0.6 * intensity);
+            circle(cr, light.x, light.y, 1.8, '#effaff', light.arrival);
+            source(cr, light.color, light.arrival * 0.65);
+            cr.setLineWidth(0.8);
+            cr.arc(light.x, light.y, 3 + 4 * light.arrival, 0, TAU);
+            cr.stroke();
+        }
+    }
+}
+
+function drawSharedWorker(cr, x, y, time, intensity) {
+    glow(cr, x, y, 43, '#8c65ca', 0.38 * intensity);
+    cr.save();
+    cr.translate(x, y);
+    cr.scale(1, 0.4);
+    for (let ring = 0; ring < 3; ring++) {
+        source(cr, ring === 1 ? '#d2b8ff' : '#9576c7', 0.65 - ring * 0.15);
+        cr.setLineWidth(1.7);
+        const angle = time * 0.2 + ring * 2;
+        cr.arc(0, 0, 23 + ring * 4, angle, angle + 5.2);
+        cr.stroke();
+    }
+    cr.restore();
+    circle(cr, x, y, 12, '#020309', 1);
+    source(cr, '#ac8fe0', 0.8);
+    cr.setLineWidth(1.1);
+    cr.arc(x, y, 12.5, 0, TAU);
+    cr.stroke();
+    label(cr, x, y + 33, 'SHARED WORKER', '#d3c6ec', 10);
+    label(cr, x, y + 47, 'RECORDED ACTIVITY', '#a99abb', 8);
 }
 
 export function hitTest(scene, coordinates, visible, x, y) {
@@ -390,9 +487,10 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
         attribution(cr, width, height, null);
         return;
     }
-    const {coordinates, visible, motionLinks} = layoutScene(scene, phase, width, height, skyMode, focus, settings, time, systemPhase);
+    const layout = layoutScene(scene, phase, width, height, skyMode, focus, settings, time, systemPhase);
+    const {coordinates, visible, motionLinks} = layout;
     const intensity = Number(settings.glow ?? DEFAULT_SETTINGS.glow);
-    if (settings.links !== false) {
+    if (settings.links !== false && !(settings.write_lights === true && (settings.agent_mode ?? 'orbiting') === 'orbiting')) {
         for (let i = 0; i < motionLinks.length; i++) {
             const link = motionLinks[i];
             const a = coordinates[link.from], b = coordinates[link.to];
@@ -406,6 +504,7 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
             circle(cr, x, y, 2.25, '#e6f7ff', 0.88);
         }
     }
+    drawActivityLights(cr, activityLights(scene, layout, settings, time), intensity);
     for (let i = 0; i < scene.nodes.length; i++) {
         if (!visible.has(i)) continue;
         const node = scene.nodes[i], [x, y] = coordinates[i];
@@ -426,6 +525,8 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
             circle(cr, x, y, 7.3, node.color, 0.94);
             circle(cr, x, y, 2.5, '#ffffff', 0.76);
             if (settings.labels !== false) label(cr, x, y - 17, node.name.toUpperCase(), '#d5e7f7', 10);
+        } else if (sharedWorker(node)) {
+            drawSharedWorker(cr, x, y, time, intensity);
         } else if (node.kind === 'Agent') {
             const core = node.action === 'center';
             glow(cr, x, y, core ? 71 : 29, node.color, (core ? 0.61 : 0.43) * intensity * node.alpha);

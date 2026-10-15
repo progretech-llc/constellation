@@ -56,7 +56,8 @@ export default class FactoryObservatoryWallpaper extends Extension {
             if (this._settings.enabled !== false && this._settings.paused !== true) {
                 this._phase = advancePhase(this._phase, elapsed, this._settings.rotation_speed);
                 if (this._settings.solar_rotation)
-                    this._systemPhase = advancePhase(this._systemPhase, elapsed, this._settings.solar_rotation_speed);
+                    this._systemPhase = advancePhase(this._systemPhase, elapsed,
+                        this._settings.solar_rotation_speed * (this._settings.solar_clockwise ? -1 : 1));
                 this._motionTime += elapsed;
                 for (const area of this._areas) area.queue_repaint();
             }
@@ -100,9 +101,11 @@ export default class FactoryObservatoryWallpaper extends Extension {
                 rays: this._clamp(raw.rays, DEFAULT_SETTINGS.rays),
                 density: this._clamp(raw.density, DEFAULT_SETTINGS.density),
                 links: raw.links !== false,
+                write_lights: raw.write_lights === true,
                 labels: raw.labels !== false,
                 agent_mode: ['orbiting', 'asteroid', 'satellite'].includes(raw.agent_mode) ? raw.agent_mode : 'orbiting',
                 solar_rotation: raw.solar_rotation === true,
+                solar_clockwise: raw.solar_clockwise === true,
                 solar_rotation_speed: Number.isFinite(solarSpeed) ? Math.max(0, Math.min(10, solarSpeed)) : DEFAULT_SETTINGS.solar_rotation_speed,
             };
         } catch (_error) {

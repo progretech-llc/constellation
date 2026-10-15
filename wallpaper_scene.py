@@ -45,6 +45,7 @@ def agent_movement_metadata(files: list, nodes: dict) -> list[dict]:
                 modified_targets.append(indices[parent])
         result.append({'agent': agent_index,
                        'targets': [indices['file:' + item.path] for item in touched[:7]],
+                       'write_targets': [indices['file:' + item.path] for item in written[:7]],
                        'last_modified_root': indices.get('root:' + last_root) if last_root else None,
                        'modified_targets': list(dict.fromkeys(modified_targets))})
     return result
@@ -167,6 +168,7 @@ def make_scene() -> dict:
             "z": round(nodes["bz"][index], 4),
             "name": nodes["name"][index],
             "kind": nodes["kind"][index],
+            "display_role": 'shared-worker' if nodes['id'][index] == 'agent:factory-worker' else '',
             "color": nodes["color"][index],
             "action": nodes["action"][index],
             "alpha": nodes["alpha"][index],
