@@ -1,7 +1,7 @@
-"""Read bounded, shared MemPalace activity through the identity-bound CLI.
+"""Read bounded, shared Hindsight activity through the identity-bound CLI.
 
 This module consumes the CLI's text output and keeps only reviewed project
-activity. It never opens MemPalace's database or another role's receipt files.
+activity. It never opens Hindsight's database or another role's receipt files.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
-MEMORY_CLI = "/home/edwin/ptinternal/bin/mempalace"
+MEMORY_CLI = "/home/edwin/ptinternal/bin/hindsight"
 MEMORY_AGENT = "codex"
 LIST_LIMIT = 2000
 SEARCH_LIMIT = 700
@@ -25,18 +25,17 @@ MIN_FILES_PER_AGENT = 4
 
 ROOTS = (
     ("PTINTERNAL", Path("/home/edwin/ptinternal")),
-    ("Repositories", Path("/mnt/pt-context/projects")),
-    ("Pictures", Path("/home/edwin/Pictures")),
-    ("Knowledge", Path("/mnt/pt-context/knowledge")),
+    ("Hindsight", Path("/mnt/pt-context/factory-support/hindsight")),
+    ("Projects", Path("/mnt/pt-context/projects")),
     ("Job artifacts", Path("/mnt/pt-context/job-artifacts")),
     ("Deliverables", Path("/mnt/pt-context/deliverables")),
 )
-ROOT_PATH_ALIASES = (("PTINTERNAL", Path("/home/edwin/Rend")),
-                     ("Repositories", Path("/home/edwin/PycharmProjects")))
+ROOT_PATH_ALIASES = (("PTINTERNAL", Path("/home/edwin/ptinternal")),
+                     ("Projects", Path("/home/edwin/PycharmProjects")))
 HOST_NAME = "MS-S1 Max"
 GALAXY_LABEL = "PT-CONTEXT"
 GALAXY_PATH = Path("/mnt/pt-context")
-DISPLAY_AGENTS = frozenset({"codex", "rend", "lyra", "mak", "progre", "imagen", "moxy"})
+DISPLAY_AGENTS = frozenset({"codex", "rend", "progre", "imagen"})
 
 
 def _display_agent(author: str) -> str:
@@ -47,7 +46,7 @@ HEADER = re.compile(r"^([0-9a-f]{8}) \[([^/]+)/([^\]]+)\] (.+)$")
 PATH = re.compile(r"(?<![A-Za-z0-9])(?:/home/edwin|/mnt/pt-context)/[^\s\"'<>|),;\]]+")
 LINE_NUMBER = re.compile(r":\d+(?::\d+)?$")
 BLOCKED_SEGMENTS = {".ssh", ".config", ".local", ".git", "private-backup", "private", "credentials", "secrets", "agents"}
-BLOCKED_NAMES = {".env", "id_rsa", "id_ed25519", "mempalace.db"}
+BLOCKED_NAMES = {".env", "id_rsa", "id_ed25519", "hindsight.db"}
 BLOCKED_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".sqlite", ".db"}
 SENSITIVE_SEGMENT = re.compile(r"(?:credential|secret|password|token|private.key)", re.I)
 WRITE = re.compile(r"\b(create(?:d)?|generat(?:ed|e)|wrote|added|saved|exported|produc(?:ed|e))\b", re.I)
@@ -126,7 +125,7 @@ def read_activities() -> list[Activity]:
         capture_output=True, text=True, timeout=30, check=False,
     )
     if recent.returncode or shared.returncode:
-        raise RuntimeError("MemPalace CLI retrieval failed; the map was not regenerated")
+        raise RuntimeError("Hindsight CLI retrieval failed; the map was not regenerated")
     if recent.stdout.strip() == "No memories." and shared.stdout.strip() == "No matching memories.":
         return []
     seen: set[str] = set()
@@ -226,6 +225,23 @@ def build_catalog(activities: list[Activity]) -> tuple[list[FileReference], list
                 kept_directories.add(item.directory)
             count += 1
             if count >= MIN_FILES_PER_AGENT:
+                break
+    # Keep a few remembered files visible in each configured system even when
+    # newer activity in busier roots fills the global file cap.
+    for root, _ in ROOTS:
+        if any(item.root == root for item in selected):
+            continue
+        count = 0
+        for item in newest:
+            if item.root != root or item.path in selected_paths:
+                continue
+            if item.directory not in kept_directories and len(kept_directories) >= MAX_DIRECTORIES:
+                continue
+            selected.append(item)
+            selected_paths.add(item.path)
+            kept_directories.add(item.directory)
+            count += 1
+            if count >= 3 or len(selected) >= MAX_FILES:
                 break
     for item in newest:
         if item.path in selected_paths:

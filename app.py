@@ -27,16 +27,15 @@ from memory_map import ROOTS, HOST_NAME, GALAXY_PATH, build_catalog, read_activi
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "build" / "factory-observatory.html"
 ROOT_COLORS = {
-    "PTINTERNAL": "#7ed6c3", "Repositories": "#6d9fff", "Pictures": "#e99e70",
-    "Knowledge": "#80c8e8", "Job artifacts": "#a18dff", "Deliverables": "#e7c46b",
+    "PTINTERNAL": "#7ed6c3", "Hindsight": "#6d9fff", "Projects": "#e99e70",
+    "Job artifacts": "#a18dff", "Deliverables": "#e7c46b",
 }
 AGENT_COLORS = {
-    "codex": "#f5a86b", "rend": "#61d6c5", "lyra": "#e9ce73",
-    "mak": "#7caeff", "progre": "#c798ff", "imagen": "#ff7d9d",
-    "moxy": "#78dcec",
+    "codex": "#f5a86b", "rend": "#61d6c5",
+    "progre": "#c798ff", "imagen": "#ff7d9d",
 }
 ACTION_COLORS = {"modified": "#ffc978", "created": "#ee8cae", "accessed": "#90d8c6", "referenced": "#8396ae"}
-ACTIVE_ROLES = ("codex", "rend", "lyra", "mak", "progre", "imagen", "moxy")
+ACTIVE_ROLES = ("codex", "rend", "progre", "imagen")
 ROOT_CENTERS = {
     label: (4.8 * math.sin(index * 2 * math.pi / len(ROOTS)),
             4.5 * math.cos(index * 2 * math.pi / len(ROOTS)),
@@ -263,7 +262,7 @@ def main() -> None:
         document, file_count, directory_count, agent_count = _page_html()
         OUTPUT.parent.mkdir(parents=True, exist_ok=True)
         OUTPUT.write_text(document)
-        print(f"Wrote {OUTPUT} from shared MemPalace: {file_count} files, {directory_count} directories, {agent_count} linked agents")
+        print(f"Wrote {OUTPUT} from shared Hindsight: {file_count} files, {directory_count} directories, {agent_count} linked agents")
         if not args.no_open:
             webbrowser.open(OUTPUT.as_uri())
         return
@@ -283,7 +282,7 @@ def main() -> None:
             try:
                 document, _, _, _ = _page_html(refresh_seconds=args.refresh_seconds)
             except RuntimeError:
-                self.send_error(503, "MemPalace retrieval failed")
+                self.send_error(503, "Hindsight retrieval failed")
                 return
             data = document.encode("utf-8")
             self.send_response(200)

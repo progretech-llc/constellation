@@ -49,7 +49,7 @@ COLORS = {
 # around each resource cluster; roles sit between the central orchestrator and
 # the clusters they are shown coordinating with in this illustrative scene.
 RESOURCES = [
-    {"name": "Rend workspace", "label": "/home/edwin/Rend", "x": -4.6, "y": 1.8, "z": -1.5, "count": 42, "kind": "Local workspace"},
+    {"name": "Rend workspace", "label": "/home/edwin/ptinternal", "x": -4.6, "y": 1.8, "z": -1.5, "count": 42, "kind": "Local workspace"},
     {"name": "PT_CONTEXT", "label": "/mnt/pt-context", "x": 0.0, "y": 4.0, "z": 0.4, "count": 48, "kind": "Mounted project storage"},
     {"name": "Git · ProgreTech org", "label": "github.com/progretech-llc", "x": 4.6, "y": 1.7, "z": -0.7, "count": 40, "kind": "Remote repositories"},
     {"name": "Cloud services", "label": "Google Cloud · configured services", "x": 3.4, "y": -3.0, "z": 1.6, "count": 34, "kind": "Remote services"},
