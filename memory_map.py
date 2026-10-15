@@ -38,6 +38,7 @@ def _display_agent(author: str) -> str:
 
 HEADER = re.compile(r"^([0-9a-f]{8}) \[([^/]+)/([^\]]+)\] (.+)$")
 PATH = re.compile(r"(?<![A-Za-z0-9:/])/(?:[^\s\"'<>|),;\]]+)")
+QUOTED_PATH = re.compile(r"([`\"'])(/[^\r\n]*?)\1")
 LINE_NUMBER = re.compile(r":\d+(?::\d+)?$")
 BLOCKED_SEGMENTS = {".ssh", ".config", ".local", ".git", "private-backup", "private", "credentials", "secrets"}
 BLOCKED_NAMES = {".env", "id_rsa", "id_ed25519", "hindsight.db"}
@@ -213,9 +214,20 @@ def _safe_file(candidate: str) -> tuple[str, str, str] | None:
 
 def _paths(text: str) -> list[tuple[str, str, str]]:
     found = []
-    for candidate in PATH.findall(text):
-        safe = _safe_file(candidate)
+    # A standalone evidence path or explicit quotation can contain spaces.
+    standalone = text.strip()
+    if standalone.startswith("/") and "\n" not in standalone:
+        safe = _safe_file(standalone)
         if safe:
+            return [safe]
+    for match in QUOTED_PATH.finditer(text):
+        safe = _safe_file(match.group(2))
+        if safe and safe not in found:
+            found.append(safe)
+    # Do not reinterpret a rejected quoted path as a shorter, unrelated file.
+    for candidate in PATH.findall(QUOTED_PATH.sub(" ", text)):
+        safe = _safe_file(candidate)
+        if safe and safe not in found:
             found.append(safe)
     return found
 
