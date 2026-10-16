@@ -428,7 +428,28 @@ function label(cr, x, y, text, hex, size = 11, maxWidth = null) {
     cr.showText(text);
 }
 
-function paintForeground(cr, width, height, image) {
+function cachedLayer(cr, cache, slot, key, width, height, paint) {
+    if (!cache) { paint(cr); return; }
+    if (cache[slot]?.key !== key) {
+        const surface = new Cairo.ImageSurface(Cairo.Format.ARGB32, width, height);
+        const painter = new Cairo.Context(surface);
+        try { paint(painter); } finally { painter.$dispose(); }
+        cache[slot] = {key, surface};
+    }
+    cr.setSourceSurface(cache[slot].surface, 0, 0);
+    cr.paint();
+}
+
+function paintForeground(cr, width, height, image, cache = null) {
+    if (cache) {
+        if (cache.foregroundImage !== image) {
+            delete cache.foreground;
+            cache.foregroundImage = image;
+        }
+        cachedLayer(cr, cache, 'foreground', `${width}:${height}`, width, height,
+            painter => paintForeground(painter, width, height, image));
+        return;
+    }
     if (!image) return;
     const imageWidth = image.getWidth(), imageHeight = image.getHeight();
     const scale = Math.max(width / imageWidth, height / imageHeight);
@@ -488,13 +509,14 @@ function attribution(cr, width, height, scene) {
     cr.restore();
 }
 
-export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTINGS, phase = 0, time = 0, foreground = null, focus = null, systemPhase = null) {
+export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTINGS, phase = 0, time = 0, foreground = null, focus = null, systemPhase = null, cache = null) {
     const skyMode = settings.foreground !== false && foreground !== null;
-    background(cr, width, height, settings, skyMode);
+    cachedLayer(cr, cache, 'background', JSON.stringify([width, height, skyMode, settings.glow ?? DEFAULT_SETTINGS.glow]),
+        width, height, painter => background(painter, width, height, settings, skyMode));
     spiralDust(cr, phase, width, height, settings, skyMode);
     lightRays(cr, phase, width, height, settings, skyMode);
     if (!scene || !Array.isArray(scene.nodes)) {
-        if (skyMode) paintForeground(cr, width, height, foreground);
+        if (skyMode) paintForeground(cr, width, height, foreground, cache);
         label(cr, width * 0.5, height - 24, 'MEMORY SCENE UNAVAILABLE', '#ed9a92', 10);
         attribution(cr, width, height, null);
         return;
@@ -560,7 +582,7 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
             circle(cr, x, y, 1.1 + Math.max(0, node.z + 1) * 0.30, node.color, flicker);
         }
     }
-    if (skyMode) paintForeground(cr, width, height, foreground);
+    if (skyMode) paintForeground(cr, width, height, foreground, cache);
     if (focus) label(cr, Math.min(width * 0.47, 410), 44,
         `FOCUS: ${focus.name.toUpperCase()}  ·  ALT+CLICK AGAIN TO RESET`, '#c7dcf4', 10);
     attribution(cr, width, height, scene);

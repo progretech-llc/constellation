@@ -49,7 +49,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
             this._reload();
             return GLib.SOURCE_CONTINUE;
         });
-        this._tickId = GLib.timeout_add(GLib.PRIORITY_LOW, 125, () => {
+        this._tickId = GLib.timeout_add(GLib.PRIORITY_LOW, 33, () => {
             const now = GLib.get_monotonic_time();
             const elapsed = Math.min(0.5, Math.max(0, (now - this._lastTick) / 1_000_000));
             this._lastTick = now;
@@ -149,10 +149,11 @@ export default class FactoryObservatoryWallpaper extends Extension {
             const area = new St.DrawingArea({reactive: false, visible: this._settings.enabled});
             area.set_position(monitor.x, monitor.y);
             area.set_size(monitor.width, monitor.height);
+            const cache = {}; // One bounded pair of static surfaces per monitor.
             area.connect('repaint', actor => {
                 const cr = actor.get_context();
                 try {
-                    renderGalaxy(cr, actor.width, actor.height, this._scene, this._settings, this._phase, this._motionTime, this._foreground, this._focus, this._systemPhase);
+                    renderGalaxy(cr, actor.width, actor.height, this._scene, this._settings, this._phase, this._motionTime, this._foreground, this._focus, this._systemPhase, cache);
                 } finally {
                     cr.$dispose();
                 }
