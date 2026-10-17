@@ -1,0 +1,188 @@
+"""Bounded local metadata discovery. Never connect to a gateway or start an agent."""
+from __future__ import annotations
+
+import json
+import re
+import shlex
+import shutil
+import subprocess
+from pathlib import Path
+
+from config import load_config
+
+AGENT_ID = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}')
+MAX_CONFIG_BYTES = 1_000_000
+CLIENTS = (
+    ('Hermes', 'hermes', '.hermes/config.yaml'),
+    ('Goose', 'goose', '.config/goose/config.yaml'),
+    ('OpenCode', 'opencode', '.config/opencode/opencode.json'),
+    ('Codex', 'codex', '.codex/config.toml'),
+    ('Claude Code', 'claude', '.claude.json'),
+)
+
+
+def valid_id(value) -> bool:
+    return isinstance(value, str) and AGENT_ID.fullmatch(value) is not None
+
+
+def read_client_config(path: Path) -> dict:
+    if path.stat().st_size > MAX_CONFIG_BYTES:
+        raise ValueError('Configuration exceeds discovery size limit')
+    text = path.read_text()
+    if path.suffix == '.json':
+        data = json.loads(text)
+    elif path.suffix == '.toml':
+        import tomllib
+        data = tomllib.loads(text)
+    else:
+        import yaml
+        try:
+            data = yaml.safe_load(text)
+        except yaml.YAMLError as error:
+            raise ValueError('Invalid YAML configuration') from error
+    if not isinstance(data, dict):
+        raise ValueError('Invalid configuration object')
+    return data
+
+
+def memory_bindings(data: dict) -> list[dict]:
+    """Extract only explicit factory-memory MCP identities; discard all other fields."""
+    found = []
+    for group in ('mcp_servers', 'mcpServers', 'mcp', 'extensions'):
+        entries = data.get(group, {})
+        if not isinstance(entries, dict):
+            continue
+        for server in list(entries.values())[:100]:
+            if not isinstance(server, dict) or server.get('enabled') is False:
+                continue
+            command = server.get('command', server.get('cmd', []))
+            if isinstance(command, str):
+                command = shlex.split(command)
+            args = server.get('args', [])
+            if not isinstance(command, list) or not isinstance(args, list):
+                continue
+            argv = command + args
+            if not all(isinstance(arg, str) for arg in argv) or not argv:
+                continue
+            if Path(argv[0]).name != 'factory-memory-mcp':
+                continue
+            if '--agent' not in argv or argv.index('--agent') + 1 >= len(argv):
+                continue
+            agent = argv[argv.index('--agent') + 1]
+            if not valid_id(agent):
+                continue
+            project = ''
+            if '--project' in argv and argv.index('--project') + 1 < len(argv):
+                candidate = argv[argv.index('--project') + 1]
+                if valid_id(candidate):
+                    project = candidate
+            item = {'id': agent, 'project': project}
+            if item not in found:
+                found.append(item)
+    return found
+
+
+def configured_candidates(config: dict, scene: dict | None = None) -> list[dict]:
+    agents = {}
+    for agent in [*config.get('agents', []), *(config.get('display_agents') or []),
+                  *(scene or {}).get('available_agents', [])]:
+        if valid_id(agent):
+            agents[agent] = {'id': agent, 'name': agent.replace('-', ' ').title(), 'sources': ['Saved configuration']}
+    for node in (scene or {}).get('nodes', [])[:5000]:
+        if node.get('kind') != 'Agent' or not str(node.get('id', '')).startswith('agent:'):
+            continue
+        agent = node['id'].removeprefix('agent:')
+        if valid_id(agent):
+            item = agents.setdefault(agent, {'id': agent, 'name': str(node.get('name', agent))[:80], 'sources': []})
+            item['sources'].append('Current galaxy')
+    return list(agents.values())
+
+
+def discover(config: dict, *, home: Path | None = None, run=subprocess.run,
+             which=shutil.which, activity_reader=None) -> dict:
+    home = home or Path.home()
+    candidates = {item['id']: item for item in configured_candidates(config)}
+    sources, warnings = [], []
+
+    def add(agent, name, source):
+        agent = config.get('agent_aliases', {}).get(agent, agent)
+        if not valid_id(agent):
+            return
+        item = candidates.setdefault(agent, {'id': agent, 'name': name[:80], 'sources': []})
+        if source not in item['sources']:
+            item['sources'].append(source)
+
+    # List service metadata only. No environments, command lines, ports or tokens.
+    services = {}
+    try:
+        result = run(['systemctl', '--user', 'list-units', '--type=service', '--all', '--output=json', '--no-pager'],
+                     capture_output=True, text=True, timeout=5, check=True)
+        for unit in json.loads(result.stdout):
+            name = unit.get('unit', '')
+            if re.fullmatch(r'[a-zA-Z0-9@_.-]{1,160}\.service', name) and 'gateway' in name.lower():
+                state = 'running' if unit.get('active') == 'active' and unit.get('sub') == 'running' else 'not running'
+                services[name] = state
+                sources.append({'name': name, 'kind': 'gateway service', 'status': state})
+    except (OSError, ValueError, TypeError, subprocess.SubprocessError):
+        warnings.append('Local service status unavailable.')
+
+    if which('openclaw'):
+        try:
+            result = run(['openclaw', 'agents', 'list', '--json'], capture_output=True, text=True,
+                         timeout=25, check=True)
+            roster = json.loads(result.stdout)
+            if not isinstance(roster, list):
+                raise ValueError('Invalid roster')
+            for entry in roster[:100]:
+                agent = entry.get('id')
+                if not valid_id(agent):
+                    continue
+                name = str(entry.get('identityName') or entry.get('name') or agent)[:80]
+                # OpenClaw's default ID can differ from its known shared identity.
+                # Only reconcile a name already present in the saved roster.
+                if agent == 'main' and name.lower() in config.get('agents', []):
+                    agent = name.lower()
+                add(agent, name, 'OpenClaw · configured agent')
+            sources.append({'name': 'OpenClaw', 'kind': 'agent roster',
+                            'status': f'{len(roster)} configured agents'})
+        except (OSError, ValueError, TypeError, AttributeError, subprocess.SubprocessError):
+            warnings.append('OpenClaw roster unavailable; other sources were still checked.')
+
+    for name, executable, relative in CLIENTS:
+        path = home / relative
+        if not which(executable) and not path.is_file():
+            continue
+        bindings = []
+        status = 'installed client; no shared-memory identity found'
+        if path.is_file():
+            try:
+                bindings = memory_bindings(read_client_config(path))
+            except (OSError, ValueError, TypeError, ImportError):
+                status = 'client found; identity configuration unavailable'
+                warnings.append(f'{name} identity metadata could not be read.')
+        if bindings:
+            status = 'configured client; shared-memory identity found'
+            for binding in bindings:
+                detail = f"{name} · configured client"
+                if binding['project']:
+                    detail += f" · {binding['project']}"
+                add(binding['id'], binding['id'].replace('-', ' ').title(), detail)
+        sources.append({'name': name, 'kind': 'local client', 'status': status})
+
+    try:
+        if activity_reader is None:
+            from memory_map import read_activities
+            activity_reader = read_activities
+        activities = activity_reader()
+        for activity in activities[:2000]:
+            add(activity.author, activity.author.replace('-', ' ').title(), 'Reviewed activity · configured memory source')
+        sources.append({'name': 'Shared reviewed memory', 'kind': 'recorded activity',
+                        'status': f'{len(activities)} activities checked'})
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+        warnings.append('Reviewed activity unavailable; configured agents remain selectable.')
+    return {'agents': sorted(candidates.values(), key=lambda item: item['id']),
+            'sources': sources, 'warnings': warnings}
+
+
+if __name__ == '__main__':
+    print(json.dumps(discover(load_config())))

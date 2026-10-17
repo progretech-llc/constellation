@@ -30,6 +30,8 @@ ROOTS = root_entries(CONFIG)
 def _display_agent(author: str) -> str:
     """Map scene nodes only; Activity.author and memory IDs keep original provenance."""
     agent = CONFIG['agent_aliases'].get(author, author)
+    if agent in (CONFIG.get('display_agents') or []):
+        return agent
     if CONFIG['agents'] and agent not in CONFIG['agents'] and CONFIG['unlisted_agent']:
         return CONFIG['unlisted_agent']
     return agent
@@ -64,6 +66,8 @@ class FileReference:
     memory_ids: list[str] = field(default_factory=list)
     memory_projects: list[str] = field(default_factory=list)
     newest_rank: int = 10**9
+    agent_ranks: dict[str, int] = field(default_factory=dict)
+    agent_write_ranks: dict[str, int] = field(default_factory=dict)
 
 
 def _project_allowed(project: str) -> bool:
@@ -241,6 +245,9 @@ def build_catalog(activities: list[Activity]) -> tuple[list[FileReference], list
                 seen_this_activity.add(marker)
                 item = files.setdefault(path, FileReference(path, directory, root))
                 item.newest_rank = min(item.newest_rank, rank)
+                item.agent_ranks[display_agent] = min(item.agent_ranks.get(display_agent, rank), rank)
+                if action in {'created', 'modified'}:
+                    item.agent_write_ranks[display_agent] = min(item.agent_write_ranks.get(display_agent, rank), rank)
                 if activity.memory_id not in item.memory_ids:
                     item.memory_ids.append(activity.memory_id)
                     item.memory_projects.append(activity.project)
@@ -275,6 +282,8 @@ def build_catalog(activities: list[Activity]) -> tuple[list[FileReference], list
     # Keep a few remembered files visible in each configured system even when
     # newer activity in busier roots fills the global file cap.
     for root, _ in ROOTS:
+        if len(selected) >= MAX_FILES:
+            break
         if any(item.root == root for item in selected):
             continue
         count = 0

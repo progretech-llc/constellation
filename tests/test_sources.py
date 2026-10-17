@@ -164,6 +164,37 @@ class ConfiguredSourcesTests(unittest.TestCase):
         self.assertEqual(files[0].agents, {'worker': 'modified'})
         self.assertEqual(files[0].memory_ids, ['legacy-1', 'legacy-2'])
 
+    def test_movement_chronology_is_per_agent_and_writes_are_separate(self):
+        second_root = self.base / 'Pictures'
+        second_root.mkdir()
+        second = second_root / 'other.txt'
+        second.write_text('example')
+        self.map.ROOTS = (*self.map.ROOTS, ('Pictures', second_root))
+        activities = [self.map.Activity('new', 'lead', 'Example', [f'Modified {self.file}']),
+                      self.map.Activity('read', 'worker', 'Example', [f'Read {self.file}']),
+                      self.map.Activity('write', 'worker', 'Example', [f'Modified {second}']),
+                      self.map.Activity('old', 'worker', 'Example', [f'Modified {self.file}'])]
+        files, _ = self.map.build_catalog(activities)
+        from wallpaper_scene import agent_movement_metadata
+        nodes = {'id': ['agent:worker', 'root:Projects', 'root:Pictures'] +
+                       ['file:' + item.path for item in files]}
+        movement = agent_movement_metadata(files, nodes)[0]
+        self.assertEqual(movement['last_modified_root'], 2)
+        self.assertEqual(nodes['id'][movement['modified_targets'][0]], 'file:' + str(second))
+        self.assertEqual(nodes['id'][movement['targets'][0]], 'file:' + str(self.file))
+        self.assertEqual(next(item for item in files if item.path == str(self.file)).agent_write_ranks['worker'], 3)
+
+    def test_file_limit_is_respected_across_multiple_roots(self):
+        other = self.base / 'Other'
+        other.mkdir()
+        file = other / 'file.txt'
+        file.write_text('test')
+        self.map.ROOTS = (*self.map.ROOTS, ('Other', other))
+        self.map.MAX_FILES = 1
+        files, _ = self.map.build_catalog([
+            self.map.Activity('one', 'worker', 'Example', [f'Created {self.file}', f'Created {file}'])])
+        self.assertEqual(len(files), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

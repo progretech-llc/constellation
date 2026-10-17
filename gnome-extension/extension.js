@@ -27,6 +27,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
         this._areas = [];
         this._phase = 0.22;
         this._motionTime = 0;
+        this._systemPhase = 0;
         this._focus = null;
         this._lastTick = GLib.get_monotonic_time();
         this._reload();
@@ -48,12 +49,15 @@ export default class FactoryObservatoryWallpaper extends Extension {
             this._reload();
             return GLib.SOURCE_CONTINUE;
         });
-        this._tickId = GLib.timeout_add(GLib.PRIORITY_LOW, 125, () => {
+        this._tickId = GLib.timeout_add(GLib.PRIORITY_LOW, 33, () => {
             const now = GLib.get_monotonic_time();
             const elapsed = Math.min(0.5, Math.max(0, (now - this._lastTick) / 1_000_000));
             this._lastTick = now;
             if (this._settings.enabled !== false && this._settings.paused !== true) {
                 this._phase = advancePhase(this._phase, elapsed, this._settings.rotation_speed);
+                if (this._settings.solar_rotation)
+                    this._systemPhase = advancePhase(this._systemPhase, elapsed,
+                        this._settings.solar_rotation_speed * (this._settings.solar_clockwise ? -1 : 1));
                 this._motionTime += elapsed;
                 for (const area of this._areas) area.queue_repaint();
             }
@@ -87,6 +91,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
         try {
             const raw = readJson(CONFIG_PATH);
             const speed = Number(raw.rotation_speed);
+            const solarSpeed = Number(raw.solar_rotation_speed ?? DEFAULT_SETTINGS.solar_rotation_speed);
             this._settings = {
                 enabled: raw.enabled !== false,
                 paused: raw.paused === true,
@@ -96,7 +101,13 @@ export default class FactoryObservatoryWallpaper extends Extension {
                 rays: this._clamp(raw.rays, DEFAULT_SETTINGS.rays),
                 density: this._clamp(raw.density, DEFAULT_SETTINGS.density),
                 links: raw.links !== false,
+                write_lights: raw.write_lights === true,
+                black_hole_name: raw.black_hole_name,
                 labels: raw.labels !== false,
+                agent_mode: ['orbiting', 'asteroid', 'satellite'].includes(raw.agent_mode) ? raw.agent_mode : 'orbiting',
+                solar_rotation: raw.solar_rotation === true,
+                solar_clockwise: raw.solar_clockwise === true,
+                solar_rotation_speed: Number.isFinite(solarSpeed) ? Math.max(0, Math.min(10, solarSpeed)) : DEFAULT_SETTINGS.solar_rotation_speed,
             };
         } catch (_error) {
             this._settings = {...DEFAULT_SETTINGS};
@@ -138,10 +149,11 @@ export default class FactoryObservatoryWallpaper extends Extension {
             const area = new St.DrawingArea({reactive: false, visible: this._settings.enabled});
             area.set_position(monitor.x, monitor.y);
             area.set_size(monitor.width, monitor.height);
+            const cache = {}; // One bounded pair of static surfaces per monitor.
             area.connect('repaint', actor => {
                 const cr = actor.get_context();
                 try {
-                    renderGalaxy(cr, actor.width, actor.height, this._scene, this._settings, this._phase, this._motionTime, this._foreground, this._focus);
+                    renderGalaxy(cr, actor.width, actor.height, this._scene, this._settings, this._phase, this._motionTime, this._foreground, this._focus, this._systemPhase, cache);
                 } finally {
                     cr.$dispose();
                 }
@@ -170,7 +182,8 @@ export default class FactoryObservatoryWallpaper extends Extension {
         for (const area of this._areas) {
             if (x < area.x || y < area.y || x >= area.x + area.width || y >= area.y + area.height) continue;
             const skyMode = this._settings.foreground !== false && this._foreground !== null;
-            const {coordinates, visible} = layoutScene(this._scene, this._phase, area.width, area.height, skyMode, this._focus);
+            const {coordinates, visible} = layoutScene(this._scene, this._phase, area.width, area.height,
+                skyMode, this._focus, this._settings, this._motionTime, this._systemPhase);
             return hitTest(this._scene, coordinates, visible, x - area.x, y - area.y);
         }
         return null;

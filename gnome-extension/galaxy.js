@@ -11,9 +11,25 @@ export const DEFAULT_SETTINGS = Object.freeze({
     density: 0.72,
     links: true,
     labels: true,
+    agent_mode: 'orbiting',
+    solar_rotation: false,
+    solar_rotation_speed: 1.0,
+    solar_clockwise: false,
+    write_lights: false,
+    black_hole_name: 'Shared worker',
 });
 
 const TAU = Math.PI * 2;
+
+export function blackHoleName(value) {
+    if (typeof value !== 'string') return DEFAULT_SETTINGS.black_hole_name;
+    const clean = value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().replace(/\s+/gu, ' ');
+    return Array.from(clean).slice(0, 32).join('') || DEFAULT_SETTINGS.black_hole_name;
+}
+
+function sharedWorker(node) {
+    return node?.kind === 'Agent' && (node.display_role === 'shared-worker' || node.id === 'agent:factory-worker');
+}
 
 export function advancePhase(phase, elapsed, degreesPerSecond) {
     return (phase - elapsed * degreesPerSecond * Math.PI / 180 + TAU) % TAU;
@@ -71,7 +87,86 @@ function project(x, y, z, phase, width, height, skyMode) {
         height * (skyMode ? 0.265 : 0.5) + ry * scale * (skyMode ? 0.43 : 0.77) + z * scale * 0.11];
 }
 
-export function layoutScene(scene, phase, width, height, skyMode, focus = null) {
+function agentSeed(id) {
+    let hash = 2166136261;
+    for (const character of id) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+    return (hash >>> 0) / 4294967296;
+}
+
+function mixPoint(a, b, fraction) {
+    const t = fraction * fraction * (3 - 2 * fraction);
+    return {x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t,
+        z: a.z + (b.z - a.z) * t};
+}
+
+function agentMotion(scene, positions, time, mode) {
+    const links = scene.links ?? [];
+    if (!['asteroid', 'satellite'].includes(mode))
+        return links.some(link => sharedWorker(scene.nodes[link.from])) ?
+            links.filter(link => !sharedWorker(scene.nodes[link.from])) : links;
+    const nodes = scene.nodes;
+    const bases = new Map(nodes.map(node => [node.id, node]));
+    const satelliteLinks = [];
+    for (const activity of scene.agent_activity ?? []) {
+        const agent = nodes[activity.agent];
+        if (agent?.kind !== 'Agent' || sharedWorker(agent)) continue;
+        const seed = agentSeed(agent.id);
+        if (mode === 'satellite') {
+            const system = nodes[activity.last_modified_root];
+            if (system?.kind !== 'Directory system') continue;
+            const center = positions.get(system.id);
+            if (!center) continue;
+            const angle = seed * TAU - time * 0.28;
+            const radius = 0.8 + seed * 0.6;
+            positions.set(agent.id, {x: center.x + radius * Math.cos(angle),
+                y: center.y + radius * Math.sin(angle), z: center.z + 0.25});
+            for (const target of activity.modified_targets ?? []) {
+                if (nodes[target]?.root === system.root)
+                    satelliteLinks.push({from: activity.agent, to: target, color: agent.color});
+            }
+            continue;
+        }
+        const targets = (activity.targets ?? []).filter(index =>
+            ['Remembered file', 'Remembered directory', 'Directory system'].includes(nodes[index]?.kind) &&
+            positions.has(nodes[index].id));
+        if (!targets.length) continue;
+        // Each leg approaches a folder orbit, loops near it, touches its target,
+        // and pauses briefly before departing. Endpoints track the moving scene.
+        const clock = Math.max(0, time) / 16 + seed * targets.length;
+        const step = Math.floor(clock);
+        const t = clock - step;
+        const target = nodes[targets[step % targets.length]];
+        const previous = nodes[targets[(step + targets.length - 1) % targets.length]];
+        const destination = positions.get(target.id);
+        const start = positions.get(previous.id);
+        const parentNode = bases.get(target.orbit_parent);
+        const parent = positions.get(parentNode?.id) ?? destination;
+        const radius = Math.max(0.45, Math.min(1.3,
+            Math.hypot(destination.x - parent.x, destination.y - parent.y) + 0.22));
+        const initialAngle = Math.atan2(destination.y - parent.y, destination.x - parent.x) + 0.6;
+        const orbit = amount => ({x: parent.x + radius * Math.cos(initialAngle - amount * TAU),
+            y: parent.y + radius * Math.sin(initialAngle - amount * TAU), z: parent.z + 0.18});
+        let position;
+        if (t < 0.4) {
+            position = mixPoint(start, orbit(0), t / 0.4);
+            const bend = Math.sin(Math.PI * t / 0.4) ** 2 * 0.45;
+            position.x += bend * Math.cos(seed * TAU);
+            position.y += bend * Math.sin(seed * TAU);
+        } else if (t < 0.75) {
+            const u = (t - 0.4) / 0.35;
+            position = orbit(0.8 * u * u * (3 - 2 * u));
+        } else if (t < 0.95) {
+            position = mixPoint(orbit(0.8), destination, (t - 0.75) / 0.2);
+        } else {
+            position = {...destination};
+        }
+        positions.set(agent.id, position);
+    }
+    return mode === 'asteroid' ? [] : satelliteLinks;
+}
+
+export function layoutScene(scene, phase, width, height, skyMode, focus = null,
+                            settings = DEFAULT_SETTINGS, time = 0, systemPhase = null) {
     const nodes = scene?.nodes ?? [];
     const bases = new Map(nodes.filter(node => node.id).map(node => [node.id, node]));
     const positions = new Map();
@@ -86,7 +181,8 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null) 
         // Integer multiples keep orbits continuous when the scene phase wraps at 2π.
         const speed = node.kind === 'Remembered file' ? 3 :
             node.kind === 'Directory system' ? 0 : 1;
-        const angle = phase * speed;
+        // Independent solar controls replace inherited local orbits while enabled.
+        const angle = settings.solar_rotation === true && node.kind !== 'Agent' ? 0 : phase * speed;
         const dx = node.x - parent.x, dy = node.y - parent.y;
         positions.set(node.id, {
             x: movingParent.x + dx * Math.cos(angle) - dy * Math.sin(angle),
@@ -94,6 +190,25 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null) 
             z: movingParent.z + node.z - parent.z,
         });
     }
+    if (settings.solar_rotation === true) {
+        const speed = Number(settings.solar_rotation_speed ?? DEFAULT_SETTINGS.solar_rotation_speed);
+        const direction = settings.solar_clockwise === true ? -1 : 1;
+        const localPhase = systemPhase ?? -time * (Number.isFinite(speed) ? Math.max(0, Math.min(10, speed)) : 1) * direction * Math.PI / 180;
+        // Cancel the global projection's angle for relative planet positions so
+        // slow clockwise spin cannot be overpowered by galaxy counterclockwise spin.
+        const spin = localPhase - phase;
+        const centers = new Map(nodes.filter(node => node.kind === 'Directory system')
+            .map(node => [node.root, positions.get(node.id)]));
+        for (const node of nodes) {
+            if (['Host', 'Agent', 'Directory system'].includes(node.kind)) continue;
+            const center = centers.get(node.root), point = positions.get(node.id);
+            if (!center || !point) continue;
+            const dx = point.x - center.x, dy = point.y - center.y;
+            positions.set(node.id, {x: center.x + dx * Math.cos(spin) - dy * Math.sin(spin),
+                y: center.y + dx * Math.sin(spin) + dy * Math.cos(spin), z: point.z});
+        }
+    }
+    const motionLinks = agentMotion(scene ?? {nodes: [], links: []}, positions, time, settings.agent_mode);
     const visible = new Set();
     if (!focus) {
         nodes.forEach((_, index) => visible.add(index));
@@ -108,8 +223,15 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null) 
                 visible.add(index);
             }
         });
-        for (const link of scene.links ?? []) {
+        const focusLinks = settings.agent_mode === 'satellite' ? motionLinks :
+            settings.agent_mode === 'asteroid' ? (scene.agent_activity ?? []).flatMap(activity =>
+                (activity.targets ?? []).map(to => ({from: activity.agent, to}))) : scene.links ?? [];
+        for (const link of focusLinks) {
             if (visible.has(link.to)) visible.add(link.from);
+        }
+        for (const activity of scene.agent_activity ?? []) {
+            if (sharedWorker(nodes[activity.agent]) && (activity.targets ?? []).some(i => visible.has(i)))
+                visible.add(activity.agent);
         }
     }
     const anchorNode = focus ? nodes.find(node => node.kind === focus.kind &&
@@ -118,13 +240,92 @@ export function layoutScene(scene, phase, width, height, skyMode, focus = null) 
     const zoom = focus ? (focus.kind === 'Directory system' ? 1.9 : 2.6) : 1;
     const base = project(0, 0, 0, phase, width, height, skyMode);
     const coordinates = nodes.map(node => {
+        // Screen anchor stays still through galaxy/local rotation and focus zoom.
+        if (sharedWorker(node)) return [Math.max(110, width - 120), Math.max(88, height * 0.15)];
         const position = positions.get(node.id) ?? node;
         const point = project(position.x - (anchor?.x ?? 0), position.y - (anchor?.y ?? 0),
             position.z - (anchor?.z ?? 0), phase, width, height, skyMode);
         return [base[0] + (point[0] - base[0]) * zoom,
             base[1] + (point[1] - base[1]) * zoom];
     });
-    return {coordinates, visible, positions};
+    return {coordinates, visible, positions, motionLinks};
+}
+
+// Bounded visual replays of reviewed activity, never synthetic filesystem events.
+export function activityLights(scene, layout, settings, time) {
+    const lights = [];
+    const {coordinates, visible} = layout;
+    for (const activity of scene.agent_activity ?? []) {
+        const agent = scene.nodes[activity.agent];
+        if (!agent || !visible.has(activity.agent)) continue;
+        const inward = sharedWorker(agent);
+        if (!inward && !(settings.write_lights === true && ['orbiting', 'asteroid'].includes(settings.agent_mode ?? 'orbiting')))
+            continue;
+        const targets = [...new Set(inward ? activity.targets ?? [] : activity.write_targets ?? [])]
+            .filter(i => scene.nodes[i]?.kind === 'Remembered file' && visible.has(i)).slice(0, 7);
+        if (!targets.length) continue;
+        const lanes = inward ? Math.min(3, targets.length) : 1;
+        for (let lane = 0; lane < lanes; lane++) {
+            const clock = Math.max(0, time) / (inward ? 9 : 6) + agentSeed(agent.id) + lane / lanes;
+            const step = Math.floor(clock), fraction = clock - step;
+            const target = targets[(step + lane) % targets.length];
+            const from = inward ? target : activity.agent, to = inward ? activity.agent : target;
+            const a = coordinates[from], b = coordinates[to];
+            if (!a || !b) continue;
+            const progress = Math.min(1, fraction / 0.82);
+            const eased = progress * progress * (3 - 2 * progress);
+            const arrival = !inward && fraction >= 0.82 ? Math.sin((fraction - 0.82) / 0.18 * Math.PI) : 0;
+            lights.push({kind: inward ? 'inward' : 'write', from, to, target, progress,
+                x: a[0] + (b[0] - a[0]) * eased, y: a[1] + (b[1] - a[1]) * eased,
+                alpha: progress < 1 ? Math.min(1, progress * 8, (1 - progress) * 8) : 0,
+                radius: inward ? 3.6 * (1 - eased) + 0.5 : 1.8,
+                arrival, color: inward ? '#b5a0e2' : agent.color});
+        }
+    }
+    return lights;
+}
+
+function drawActivityLights(cr, lights, intensity) {
+    for (const light of lights) {
+        if (light.alpha > 0) {
+            glow(cr, light.x, light.y, 10, light.color, light.alpha * 0.36 * intensity);
+            source(cr, light.color, light.alpha * 0.9);
+            cr.setLineWidth(1.1);
+            cr.arc(light.x, light.y, light.radius, 0, TAU);
+            cr.stroke();
+            if (light.kind === 'write') circle(cr, light.x, light.y, 0.8, '#effaff', light.alpha);
+        }
+        if (light.arrival > 0) {
+            glow(cr, light.x, light.y, 12, light.color, light.arrival * 0.6 * intensity);
+            circle(cr, light.x, light.y, 1.8, '#effaff', light.arrival);
+            source(cr, light.color, light.arrival * 0.65);
+            cr.setLineWidth(0.8);
+            cr.arc(light.x, light.y, 3 + 4 * light.arrival, 0, TAU);
+            cr.stroke();
+        }
+    }
+}
+
+function drawSharedWorker(cr, x, y, time, intensity, name) {
+    glow(cr, x, y, 43, '#8c65ca', 0.38 * intensity);
+    cr.save();
+    cr.translate(x, y);
+    cr.scale(1, 0.4);
+    for (let ring = 0; ring < 3; ring++) {
+        source(cr, ring === 1 ? '#d2b8ff' : '#9576c7', 0.65 - ring * 0.15);
+        cr.setLineWidth(1.7);
+        const angle = time * 0.2 + ring * 2;
+        cr.arc(0, 0, 23 + ring * 4, angle, angle + 5.2);
+        cr.stroke();
+    }
+    cr.restore();
+    circle(cr, x, y, 12, '#020309', 1);
+    source(cr, '#ac8fe0', 0.8);
+    cr.setLineWidth(1.1);
+    cr.arc(x, y, 12.5, 0, TAU);
+    cr.stroke();
+    label(cr, x, y + 33, blackHoleName(name), '#d3c6ec', 10, 204);
+    label(cr, x, y + 47, 'RECORDED ACTIVITY', '#a99abb', 8);
 }
 
 export function hitTest(scene, coordinates, visible, x, y) {
@@ -213,16 +414,42 @@ function lightRays(cr, phase, width, height, settings, skyMode) {
     }
 }
 
-function label(cr, x, y, text, hex, size = 11) {
+function label(cr, x, y, text, hex, size = 11, maxWidth = null) {
     source(cr, hex, 0.91);
     cr.selectFontFace('Sans', Cairo.FontSlant.NORMAL, Cairo.FontWeight.BOLD);
     cr.setFontSize(size);
+    if (maxWidth !== null && cr.textExtents(text).width > maxWidth) {
+        const letters = Array.from(text);
+        while (letters.length && cr.textExtents(letters.join('') + '…').width > maxWidth) letters.pop();
+        text = letters.join('') + '…';
+    }
     const extents = cr.textExtents(text);
     cr.moveTo(x - extents.width / 2, y);
     cr.showText(text);
 }
 
-function paintForeground(cr, width, height, image) {
+function cachedLayer(cr, cache, slot, key, width, height, paint) {
+    if (!cache) { paint(cr); return; }
+    if (cache[slot]?.key !== key) {
+        const surface = new Cairo.ImageSurface(Cairo.Format.ARGB32, width, height);
+        const painter = new Cairo.Context(surface);
+        try { paint(painter); } finally { painter.$dispose(); }
+        cache[slot] = {key, surface};
+    }
+    cr.setSourceSurface(cache[slot].surface, 0, 0);
+    cr.paint();
+}
+
+function paintForeground(cr, width, height, image, cache = null) {
+    if (cache) {
+        if (cache.foregroundImage !== image) {
+            delete cache.foreground;
+            cache.foregroundImage = image;
+        }
+        cachedLayer(cr, cache, 'foreground', `${width}:${height}`, width, height,
+            painter => paintForeground(painter, width, height, image));
+        return;
+    }
     if (!image) return;
     const imageWidth = image.getWidth(), imageHeight = image.getHeight();
     const scale = Math.max(width / imageWidth, height / imageHeight);
@@ -282,25 +509,28 @@ function attribution(cr, width, height, scene) {
     cr.restore();
 }
 
-export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTINGS, phase = 0, time = 0, foreground = null, focus = null) {
+export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTINGS, phase = 0, time = 0, foreground = null, focus = null, systemPhase = null, cache = null) {
     const skyMode = settings.foreground !== false && foreground !== null;
-    background(cr, width, height, settings, skyMode);
+    cachedLayer(cr, cache, 'background', JSON.stringify([width, height, skyMode, settings.glow ?? DEFAULT_SETTINGS.glow]),
+        width, height, painter => background(painter, width, height, settings, skyMode));
     spiralDust(cr, phase, width, height, settings, skyMode);
     lightRays(cr, phase, width, height, settings, skyMode);
     if (!scene || !Array.isArray(scene.nodes)) {
-        if (skyMode) paintForeground(cr, width, height, foreground);
+        if (skyMode) paintForeground(cr, width, height, foreground, cache);
         label(cr, width * 0.5, height - 24, 'MEMORY SCENE UNAVAILABLE', '#ed9a92', 10);
         attribution(cr, width, height, null);
         return;
     }
-    const {coordinates, visible} = layoutScene(scene, phase, width, height, skyMode, focus);
+    const layout = layoutScene(scene, phase, width, height, skyMode, focus, settings, time, systemPhase);
+    const {coordinates, visible, motionLinks} = layout;
     const intensity = Number(settings.glow ?? DEFAULT_SETTINGS.glow);
-    if (settings.links !== false && Array.isArray(scene.links)) {
-        for (let i = 0; i < scene.links.length; i++) {
-            const link = scene.links[i];
+    if (settings.links !== false && !(settings.write_lights === true && (settings.agent_mode ?? 'orbiting') === 'orbiting')) {
+        for (let i = 0; i < motionLinks.length; i++) {
+            const link = motionLinks[i];
             const a = coordinates[link.from], b = coordinates[link.to];
             if (!a || !b || !visible.has(link.from) || !visible.has(link.to)) continue;
             line(cr, ...a, ...b, link.color, 0.22, 0.9);
+            if (settings.agent_mode === 'satellite') continue;
             const direction = ((time * 0.24 + i * 0.127) % 2);
             const t = direction <= 1 ? direction : 2 - direction;
             const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
@@ -308,6 +538,7 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
             circle(cr, x, y, 2.25, '#e6f7ff', 0.88);
         }
     }
+    drawActivityLights(cr, activityLights(scene, layout, settings, time), intensity);
     for (let i = 0; i < scene.nodes.length; i++) {
         if (!visible.has(i)) continue;
         const node = scene.nodes[i], [x, y] = coordinates[i];
@@ -328,6 +559,8 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
             circle(cr, x, y, 7.3, node.color, 0.94);
             circle(cr, x, y, 2.5, '#ffffff', 0.76);
             if (settings.labels !== false) label(cr, x, y - 17, node.name.toUpperCase(), '#d5e7f7', 10);
+        } else if (sharedWorker(node)) {
+            drawSharedWorker(cr, x, y, time, intensity, settings.black_hole_name);
         } else if (node.kind === 'Agent') {
             const core = node.action === 'center';
             glow(cr, x, y, core ? 71 : 29, node.color, (core ? 0.61 : 0.43) * intensity * node.alpha);
@@ -349,7 +582,7 @@ export function renderGalaxy(cr, width, height, scene, settings = DEFAULT_SETTIN
             circle(cr, x, y, 1.1 + Math.max(0, node.z + 1) * 0.30, node.color, flicker);
         }
     }
-    if (skyMode) paintForeground(cr, width, height, foreground);
+    if (skyMode) paintForeground(cr, width, height, foreground, cache);
     if (focus) label(cr, Math.min(width * 0.47, 410), 44,
         `FOCUS: ${focus.name.toUpperCase()}  ·  ALT+CLICK AGAIN TO RESET`, '#c7dcf4', 10);
     attribution(cr, width, height, scene);
