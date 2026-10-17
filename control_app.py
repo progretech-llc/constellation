@@ -30,6 +30,7 @@ DEFAULT = {
     "density": 0.72,
     "links": True,
     "labels": True,
+    "memory_planets": 20,
 }
 
 
@@ -56,7 +57,7 @@ def save_settings(values: dict) -> None:
 class ControlWindow(Gtk.ApplicationWindow):
     def __init__(self, app: Gtk.Application):
         super().__init__(application=app, title="Constellation by ProgreTech")
-        self.set_default_size(530, 690)
+        self.set_default_size(530, 740)
         self.values = settings()
         self._loading = True
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -91,6 +92,13 @@ class ControlWindow(Gtk.ApplicationWindow):
         self._scale(content, "Galaxy star density", "density", 0, 1, 2)
         self._switch(content, "Agent-to-file light trails", "links")
         self._switch(content, "Directory and agent labels", "labels")
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        row.append(Gtk.Label(label="Recent Hindsight planets", xalign=0, hexpand=True))
+        planets = Gtk.SpinButton.new_with_range(1, 100, 1)
+        planets.set_value(int(self.values['memory_planets']))
+        planets.connect('value-changed', lambda widget: self._set('memory_planets', widget.get_value_as_int()))
+        row.append(planets)
+        content.append(row)
         buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         refresh = Gtk.Button(label="Refresh memory now")
         refresh.connect("clicked", self._refresh_memory)
@@ -127,13 +135,16 @@ class ControlWindow(Gtk.ApplicationWindow):
             return
         self.values[key] = value
         save_settings(self.values)
+        if key == 'memory_planets':
+            subprocess.Popen(['systemctl', '--user', 'start', 'factory-observatory-scene.service'],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def _refresh_status(self) -> None:
         try:
             scene = json.loads(SCENE_PATH.read_text())
             age = max(0, int(time.time()) - int(scene["generated_at"]))
             counts = scene["counts"]
-            self.status.set_text(f"{counts['files']} remembered files · {counts['directories']} directories · {counts['agents']} linked agents · refreshed {age // 60} min ago")
+            self.status.set_text(f"{counts['files']} remembered files · {counts.get('memory_planets', 0)} memory planets · {counts['agents']} linked agents · refreshed {age // 60} min ago")
         except (OSError, KeyError, TypeError, ValueError):
             self.status.set_text("No valid memory scene yet. Use Refresh memory now to build one.")
 

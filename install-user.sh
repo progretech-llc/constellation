@@ -35,7 +35,7 @@ DESKTOP
 chmod 644 "$app_dir/factory-observatory.desktop"
 cat > "$unit_dir/factory-observatory-scene.service" <<UNIT
 [Unit]
-Description=Refresh the Constellation wallpaper from shared MemPalace
+Description=Refresh the Constellation wallpaper from shared Hindsight
 
 [Service]
 Type=oneshot

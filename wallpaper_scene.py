@@ -5,23 +5,73 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import tempfile
 import time
 from pathlib import Path
 
-from app import _build_scene
-from memory_map import MEMORY_AGENT, MEMORY_CLI, GALAXY_LABEL, GALAXY_PATH, build_catalog, read_activities
+from app import _build_scene, _project, ROOT_COLORS, AGENT_COLORS
+from memory_map import MEMORY_AGENT, MEMORY_CLI, GALAXY_LABEL, GALAXY_PATH, ROOTS, build_catalog, read_activities
+from hindsight_planets import read_recent, validate_directory
 
 
 STATE_HOME = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
 SCENE_PATH = STATE_HOME / "factory-observatory" / "scene.json"
+SETTINGS_PATH = Path.home() / '.config/factory-observatory/wallpaper.json'
+
+
+def add_memory_planets(nodes: dict, links: dict) -> dict[str, str]:
+    root = next(((label, path) for label, path in ROOTS if label == 'Hindsight'), None)
+    if root is None:
+        return {}
+    try:
+        count = int(json.loads(SETTINGS_PATH.read_text()).get('memory_planets', 20))
+    except (OSError, ValueError, TypeError):
+        count = 20
+    count = max(1, min(100, count))
+    records = read_recent(MEMORY_CLI, MEMORY_AGENT, count)
+    root_label, root_path = root
+    validate_directory(str(root_path))
+    root_id = 'root:' + root_label
+    root_index = nodes['id'].index(root_id)
+    center = tuple(nodes[key][root_index] for key in ('bx', 'by', 'bz'))
+    agents = {item.removeprefix('agent:'): i for i, item in enumerate(nodes['id']) if item.startswith('agent:')}
+    authors = {}
+    for index, record in enumerate(records):
+        ring, slot = divmod(index, 16)
+        slots = min(16, len(records) - ring * 16)
+        angle = slot * 2 * math.pi / slots + ring * 0.4
+        radius = 0.72 + ring * 0.48
+        xyz = (center[0] + radius * math.cos(angle), center[1] + radius * math.sin(angle),
+               center[2] + 0.18 * math.sin(angle + ring))
+        px, py, depth = _project(*xyz, 0.35)
+        color = AGENT_COLORS.get(record.author, ROOT_COLORS[root_label]) if record.author_type == 'agent' and record.author in agents else ROOT_COLORS[root_label]
+        key = 'memory:' + record.short_id
+        values = {'id': key, 'orbit_parent': root_id, 'x': px, 'y': py, 'depth': depth,
+                  'bx': xyz[0], 'by': xyz[1], 'bz': xyz[2], 'size': 6.2, 'color': color,
+                  'alpha': 0.95, 'name': record.title, 'kind': 'Memory planet',
+                  'detail': record.title + ' · author: ' + record.author,
+                  'action': '', 'memory': record.short_id, 'path': str(root_path),
+                  'root': root_label, 'memory_project': record.project}
+        for column in nodes:
+            nodes[column].append(values[column])
+        authors[key] = record.author
+        if record.author_type == 'agent' and record.author in agents:
+            source_index = agents[record.author]
+            for column, value in {'xs': [nodes['x'][source_index], px], 'ys': [nodes['y'][source_index], py],
+                                  'source_idx': source_index, 'target_idx': len(nodes['id']) - 1,
+                                  'color': color, 'alpha': 0.24, 'size': 0.8}.items():
+                links[column].append(value)
+    return authors
 
 
 def make_scene() -> dict:
     activities = read_activities()
     files, active_agents = build_catalog(activities)
     nodes, _, links, _ = _build_scene(files, active_agents)
+    planet_authors = add_memory_planets(nodes, links)
+    planet_ranks = {key: index + 1 for index, key in enumerate(planet_authors)}
     compact_nodes = [
         {
             "x": round(nodes["bx"][index], 4),
@@ -38,6 +88,8 @@ def make_scene() -> dict:
             "root": nodes["root"][index],
             "memory": nodes["memory"][index].split(", ")[0],
             "memory_project": nodes["memory_project"][index],
+            "memory_author": planet_authors.get(nodes["id"][index], ""),
+            "memory_rank": planet_ranks.get(nodes["id"][index], 0),
         }
         for index in range(len(nodes["name"]))
     ]
@@ -48,10 +100,11 @@ def make_scene() -> dict:
     return {
         "schema": "factory-observatory-wallpaper/v1",
         "generated_at": int(time.time()),
-        "source": "shared-reviewed-progretech-mempalace",
+        "source": "shared-reviewed-progretech-hindsight",
         "galaxy": {"label": GALAXY_LABEL, "path": str(GALAXY_PATH)},
-        "memory_source": {"provider": "mempalace", "cli": MEMORY_CLI, "agent": MEMORY_AGENT},
-        "counts": {"activities": len(activities), "files": len(files), "directories": len({item.directory for item in files}), "agents": len(active_agents)},
+        "memory_source": {"provider": "hindsight", "cli": MEMORY_CLI, "agent": MEMORY_AGENT,
+                          "browser_script": str(Path(__file__).with_name('memory_browser.py'))},
+        "counts": {"activities": len(activities), "files": len(files), "directories": len({item.directory for item in files}), "agents": len(active_agents), "memory_planets": len(planet_authors)},
         "nodes": compact_nodes,
         "links": compact_links,
     }
