@@ -15,6 +15,9 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
         raise RuntimeError(f'Missing source configuration: {path}. Run ./install-user.sh or copy config.example.json.')
     data = json.loads(path.read_text())
     memory = data.get('memory', {})
+    if 'ui_url' in memory:
+        from hindsight_api import validate_web_url
+        validate_web_url(memory['ui_url'])
     if memory.get('provider')=='mempalace':
         memory['provider']='hindsight'
         if str(memory.get('cli','')).endswith('/mempalace'):memory['cli']=str(memory['cli'])[:-9]+'hindsight'

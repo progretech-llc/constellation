@@ -126,6 +126,40 @@ def discover(config: dict, *, home: Path | None = None, run=subprocess.run,
     except (OSError, ValueError, TypeError, subprocess.SubprocessError):
         warnings.append('Local service status unavailable.')
 
+    # Desktop launches need not have the gateway CLI on PATH. Read roster
+    # metadata only, never sessions, memory stores or credential fields.
+    openclaw_config = home / '.openclaw/openclaw.json'
+    if openclaw_config.is_file():
+        try:
+            data = read_client_config(openclaw_config).get('agents', {})
+            entries = data.get('entries', data.get('list', []))
+            if isinstance(entries, dict):
+                entries = [{**value, 'id': key} for key, value in list(entries.items())[:100]
+                           if isinstance(value, dict)]
+            if not isinstance(entries, list):
+                raise ValueError('Invalid OpenClaw roster')
+            for entry in entries[:100]:
+                if isinstance(entry, dict) and valid_id(entry.get('id')):
+                    add(entry['id'], str(entry.get('name') or entry['id']).replace('-', ' ').title(),
+                        'OpenClaw · configured agent')
+            sources.append({'name': 'OpenClaw', 'kind': 'agent roster',
+                            'status': f'{len(entries)} configured agents · local metadata'})
+        except (OSError, ValueError, TypeError, AttributeError):
+            warnings.append('OpenClaw roster metadata unavailable.')
+
+    profiles = home / '.hermes/profiles'
+    profile_count = 0
+    if profiles.is_dir():
+        try:
+            for profile in sorted(profiles.iterdir())[:100]:
+                if valid_id(profile.name) and profile.is_dir() and (profile / 'config.yaml').is_file():
+                    add(profile.name, profile.name.replace('-', ' ').title(), 'Hermes · configured profile')
+                    profile_count += 1
+            sources.append({'name': 'Hermes profiles', 'kind': 'agent roster',
+                            'status': f'{profile_count} configured profiles · not live-agent status'})
+        except OSError:
+            warnings.append('Hermes profile metadata unavailable.')
+
     if which('openclaw'):
         try:
             result = run(['openclaw', 'agents', 'list', '--json'], capture_output=True, text=True,
@@ -153,7 +187,9 @@ def discover(config: dict, *, home: Path | None = None, run=subprocess.run,
         if not which(executable) and not path.is_file():
             continue
         bindings = []
-        status = 'installed client; no shared-memory identity found'
+        status = 'installed client; no explicit display identity found'
+        if name == 'Hermes' and profile_count:
+            status = f'{profile_count} configured profiles discovered'
         if path.is_file():
             try:
                 bindings = memory_bindings(read_client_config(path))

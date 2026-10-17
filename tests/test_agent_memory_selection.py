@@ -64,12 +64,18 @@ class SelectionTests(unittest.TestCase):
 
     def test_native_api_backend_survives_recovered_controls_and_scene(self):
         self.data['memory'] = {'provider': 'hindsight-api', 'api_url': 'http://127.0.0.1:8888',
-                               'bank_id': 'shared-activity'}
+                               'bank_id': 'shared-activity', 'ui_url': 'http://127.0.0.1:9999'}
         self.data['roots'] = [self.data['roots'][0]]
         scene = self.scene(['worker'], True)
         self.assertEqual(scene['memory_source']['provider'], 'hindsight-api')
         self.assertEqual(scene['memory_source']['config_path'], str(self.path))
         self.assertEqual(scene['counts']['files'], 1)
+        self.assertEqual(scene['counts']['memory_planets'], 1)
+        planet = next(node for node in scene['nodes'] if node['kind'] == 'Memory planet')
+        self.assertEqual(planet['memory'], 'one')
+        self.assertEqual(planet['memory_author'], 'worker')
+        self.assertEqual(planet['orbit_parent'], 'root:Hindsight')
+        self.assertEqual(scene['memory_source']['ui_url'], self.data['memory']['ui_url'])
         self.assertTrue(any(node['id'] == 'root:Hindsight' for node in scene['nodes']))
         saved = save_agent_controls(self.path, [], ['worker'])
         saved = save_memory_node(self.path, {'provider': 'qdrant', 'path': ''}, None)
@@ -143,6 +149,37 @@ class SelectionTests(unittest.TestCase):
 
 
 class DiscoveryTests(unittest.TestCase):
+    def test_native_openclaw_and_hermes_rosters_without_gateway_cli(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            config = home / '.openclaw/openclaw.json'
+            config.parent.mkdir()
+            config.write_text(json.dumps({'agents': {'entries': {
+                'main': {'model': 'example'}, 'ops-watch': {'name': 'Ops Watch'},
+                'automation': {'name': 'Automation', 'token': 'must-not-output'}}}}))
+            for name in ['progre', 'builder', 'business-desk', 'invalid id']:
+                profile = home / '.hermes/profiles' / name
+                profile.mkdir(parents=True)
+                (profile / 'config.yaml').write_text('secret: must-not-read-profile-content')
+            result = discover({'agents': ['codex']}, home=home,
+                              run=lambda *a, **kw: SimpleNamespace(stdout='[]'),
+                              which=lambda _: None, activity_reader=lambda: [])
+            self.assertEqual({x['id'] for x in result['agents']},
+                             {'codex', 'main', 'ops-watch', 'automation', 'progre', 'builder', 'business-desk'})
+            self.assertNotIn('must-not', json.dumps(result))
+            self.assertEqual(result['warnings'], [])
+
+    def test_openclaw_list_format_and_aliases_remain_supported(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            config = home / '.openclaw/openclaw.json'
+            config.parent.mkdir()
+            config.write_text(json.dumps({'agents': {'list': [{'id': 'main', 'name': 'Progre'}]}}))
+            result = discover({'agents': [], 'agent_aliases': {'main': 'progre'}}, home=home,
+                              run=lambda *a, **kw: SimpleNamespace(stdout='[]'),
+                              which=lambda _: None, activity_reader=lambda: [])
+            self.assertEqual([x['id'] for x in result['agents']], ['progre'])
+
     def test_binding_formats_are_explicit_and_do_not_expose_config(self):
         forms=[{'mcp_servers':{'x':{'command':'/example/factory-memory-mcp','args':['--agent','worker','--project','Example'],'env':{'TOKEN':'not-output'}}}},
                {'mcp':{'x':{'command':['/example/factory-memory-mcp','--agent','worker','--project','Example']}}},

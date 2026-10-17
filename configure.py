@@ -19,6 +19,7 @@ def main() -> None:
     source.add_argument('--hindsight-api', help='Vectorize Hindsight API URL (HTTP is loopback-only)')
     parser.add_argument('--bank-id', help='Explicit shared-activity bank for --hindsight-api')
     parser.add_argument('--api-key-env', help='Optional API key environment variable name')
+    parser.add_argument('--hindsight-ui', help='Hindsight Control Plane HTTP(S) URL')
     parser.add_argument('--agent', help='Your own Hindsight identity (with --hindsight-cli)')
     parser.add_argument('--project', help='Hindsight project (with --hindsight-cli)')
     parser.add_argument('--root', action='append', metavar='LABEL=PATH', help='Solar system directory; repeat to replace all roots')
@@ -71,6 +72,8 @@ def main() -> None:
         if not separator or not label.strip() or not path.strip():
             parser.error('--galaxy must be LABEL=PATH')
         data['galaxy'] = {'label': label.strip(), 'path': str(Path(path).expanduser().resolve())}
+    if args.hindsight_ui is not None:
+        data['memory']['ui_url'] = args.hindsight_ui
     if args.agents is not None:
         data['agents'] = args.agents
     if args.alias:

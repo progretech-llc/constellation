@@ -1,10 +1,24 @@
 # Constellation by ProgreTech
 
-Version 12 combines the recovered appearance, folder, agent and memory controls
+Version 13 combines the recovered appearance, folder, agent and memory controls
 with the native Hindsight API source. Asteroid and satellite modes, independent
 solar rotation, recorded-write lights and the 30 FPS renderer work with the
 configured activity backend. Agent and memory display choices preserve that
 backend. On Wayland, log out and back in after updating the extension.
+
+Click the **Hindsight** solar system to open its configured Control Plane; click
+a **memory planet** to review that exact record in the local read-only viewer.
+For the native API source, planets come from the same explicitly shared, reviewed
+records as file activity, including records that name no existing files. The
+planet count is a maximum: one eligible shared record produces one planet.
+The agent scan also reads OpenClaw's local roster and named Hermes profiles when
+gateway executables are absent from the desktop PATH. These are configured roles,
+not a claim that every role is currently running.
+
+Set the UI link with `python3 configure.py --hindsight-ui http://127.0.0.1:9999`.
+Use your Control Plane URL when it is hosted elsewhere; API and UI URLs are
+separate settings. Agent configurations, sessions and memory backends are not
+modified by scanning.
 
 Constellation turns reviewed agent-memory activity into a rotating, luminous map on an Ubuntu GNOME wallpaper. Your workstation is the central star; agents orbit it, configured directory roots become solar systems, and files mentioned in memory become stars. Agent-to-file links keep their bouncing lights as the galaxy turns counterclockwise. Progre watches the sky from the bundled rooftop foreground. The lower-right **Constellation by ProgreTech · © 2026 ProgreTech LLC** attribution is rendered by the official wallpaper in both live and empty-data states.
 

@@ -328,12 +328,22 @@ function drawSharedWorker(cr, x, y, time, intensity, name) {
     label(cr, x, y + 47, 'RECORDED ACTIVITY', '#a99abb', 8);
 }
 
+export function clickAction(node, source = {}, ctrl = false, shift = false) {
+    if (!node) return null;
+    const hindsight = ['hindsight', 'hindsight-api'].includes(source.provider);
+    if (hindsight && node.id === 'root:Hindsight' && source.ui_url) return 'hindsight';
+    if (hindsight && node.kind === 'Memory planet' && node.memory) return 'memory';
+    if (node.kind === 'Remembered file')
+        return ctrl ? (shift && hindsight && node.memory ? 'memory' : 'folder') : null;
+    return node.path ? 'folder' : null;
+}
+
 export function hitTest(scene, coordinates, visible, x, y) {
     let best = null;
     for (let i = 0; i < scene.nodes.length; i++) {
         if (!visible.has(i)) continue;
         const node = scene.nodes[i];
-        if (!['Host', 'Directory system', 'Remembered directory', 'Remembered file'].includes(node.kind) || !node.path) continue;
+        if (!clickAction(node, scene.memory_source, true, true)) continue;
         const [px, py] = coordinates[i];
         const radius = node.kind === 'Host' ? 30 : node.kind === 'Directory system' ? 27 : node.kind === 'Remembered directory' ? 16 : 11;
         const distance = Math.hypot(x - px, y - py) / radius;

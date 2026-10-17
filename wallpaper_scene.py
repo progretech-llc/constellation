@@ -13,7 +13,7 @@ from pathlib import Path
 
 from app import _build_scene, _project, ROOT_COLORS, AGENT_COLORS
 from memory_map import CONFIG, ROOTS, build_catalog, read_activities, _display_agent
-from hindsight_planets import read_recent, validate_directory
+from hindsight_planets import MemoryPlanet, read_recent, validate_directory
 from config import CONFIG_PATH
 from memory_discovery import PROVIDERS
 
@@ -100,23 +100,28 @@ def prepare_memory_node(nodes: dict, links: dict, config: dict) -> tuple[str, Pa
     return ('Hindsight', Path(path)) if provider == 'hindsight' and path else None
 
 
-def add_memory_planets(nodes: dict, links: dict, memory_root=None) -> dict[str, str]:
-    if CONFIG['memory']['provider'] != 'hindsight':return {}
+def add_memory_planets(nodes: dict, links: dict, memory_root=None, activities=()) -> dict[str, str]:
+    if CONFIG['memory']['provider'] not in {'hindsight', 'hindsight-api'}:return {}
     if (CONFIG.get('memory_node') or {}).get('provider', 'hindsight') != 'hindsight':
-        return {}
-    root = memory_root or next(((label, path) for label, path in ROOTS if label == 'Hindsight'), None)
-    if root is None:
-        return {}
-    if root[1] is None:
         return {}
     try:
         count = int(json.loads(SETTINGS_PATH.read_text()).get('memory_planets', 20))
     except (OSError, ValueError, TypeError):
         count = 20
     count = max(1, min(100, count))
-    records = read_recent(str(Path(CONFIG['memory']['cli']).expanduser()), CONFIG['memory']['agent'], count)
-    root_label, root_path = root
-    validate_directory(str(root_path))
+    if CONFIG['memory']['provider'] == 'hindsight-api':
+        # Reuse the already filtered shared records; never enumerate private banks
+        # or fetch every document a second time just to draw its planet.
+        records = [MemoryPlanet(item.memory_id, item.title or item.project, item.author,
+                                'agent', item.project, 'project', '') for item in activities[:count]]
+        root_label, root_path = 'Hindsight', None
+    else:
+        root = memory_root or next(((label, path) for label, path in ROOTS if label == 'Hindsight'), None)
+        if root is None or root[1] is None:
+            return {}
+        root_label, root_path = root
+        validate_directory(str(root_path))
+        records = read_recent(str(Path(CONFIG['memory']['cli']).expanduser()), CONFIG['memory']['agent'], count)
     root_id = 'root:' + root_label
     root_index = nodes['id'].index(root_id)
     center = tuple(nodes[key][root_index] for key in ('bx', 'by', 'bz'))
@@ -131,19 +136,20 @@ def add_memory_planets(nodes: dict, links: dict, memory_root=None) -> dict[str, 
                center[2] + 0.18 * math.sin(angle + ring))
         px, py, depth = _project(*xyz, 0.35)
         root_color = ROOT_COLORS.get(root_label, '#a18dff')
-        color = AGENT_COLORS.get(record.author, root_color) if record.author_type == 'agent' and record.author in agents else root_color
+        displayed_author = _display_agent(record.author)
+        color = AGENT_COLORS.get(displayed_author, root_color) if record.author_type == 'agent' and displayed_author in agents else root_color
         key = 'memory:' + record.short_id
         values = {'id': key, 'orbit_parent': root_id, 'x': px, 'y': py, 'depth': depth,
                   'bx': xyz[0], 'by': xyz[1], 'bz': xyz[2], 'size': 6.2, 'color': color,
                   'alpha': 0.95, 'name': record.title, 'kind': 'Memory planet',
                   'detail': record.title + ' · author: ' + record.author,
-                  'action': '', 'memory': record.short_id, 'path': str(root_path),
+                  'action': '', 'memory': record.short_id, 'path': str(root_path) if root_path else '',
                   'root': root_label, 'memory_project': record.project}
         for column in nodes:
             nodes[column].append(values[column])
         authors[key] = record.author
-        if record.author_type == 'agent' and record.author in agents:
-            source_index = agents[record.author]
+        if record.author_type == 'agent' and displayed_author in agents:
+            source_index = agents[displayed_author]
             for column, value in {'xs': [nodes['x'][source_index], px], 'ys': [nodes['y'][source_index], py],
                                   'source_idx': source_index, 'target_idx': len(nodes['id']) - 1,
                                   'color': color, 'alpha': 0.24, 'size': 0.8}.items():
@@ -156,7 +162,7 @@ def make_scene() -> dict:
     files, active_agents = build_catalog(activities)
     nodes, _, links, _ = _build_scene(files, active_agents)
     memory_root = prepare_memory_node(nodes, links, CONFIG)
-    planet_authors = add_memory_planets(nodes, links, memory_root)
+    planet_authors = add_memory_planets(nodes, links, memory_root, activities)
     visible_file_ids = set(nodes['id'])
     files = [item for item in files if 'file:' + item.path in visible_file_ids]
     activity_authors = {(item.memory_id, item.project): item.author for item in activities}
@@ -203,6 +209,7 @@ def make_scene() -> dict:
             "agent": CONFIG["memory"].get("agent", ""),
             "browser_script": str(Path(__file__).with_name("memory_browser.py")),
             "config_path": str(CONFIG_PATH),
+            "ui_url": CONFIG["memory"].get("ui_url", ""),
         },
         "counts": {"activities": len(activities), "files": len(files), "directories": len({item.directory for item in files}), "agents": sum(node['kind'] == 'Agent' for node in compact_nodes), "memory_planets": len(planet_authors)},
         "nodes": compact_nodes,

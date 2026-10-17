@@ -95,3 +95,10 @@ class HindsightApiTests(unittest.TestCase):
                        {'api_key_env':'not an env variable'}]:
             with self.subTest(change=change), self.assertRaises(ValueError):
                 validate_source({**self.source, **change})
+
+    def test_ui_link_cannot_embed_credentials_or_launch_non_web_handlers(self):
+        for value in ['file:///tmp/example', 'javascript:alert(1)', 'http://example.com',
+                      'https://user:secret@example.com', 'https://example.com?token=secret']:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                validate_source({**self.source, 'ui_url': value})
+        validate_source({**self.source, 'ui_url': 'http://127.0.0.1:9999'})

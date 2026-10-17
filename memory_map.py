@@ -57,6 +57,7 @@ class Activity:
     project: str
     steps: list[str] = field(default_factory=list)
     evidence: list[str] = field(default_factory=list)
+    title: str = ''
 
 
 @dataclass
@@ -122,7 +123,8 @@ def read_activities() -> list[Activity]:
     if MEMORY['provider'] == 'hindsight-api':
         from hindsight_api import read_shared_documents
         return [Activity(row['memory_id'], row['author'], row['project'],
-                         row['technical_steps'][:12], row['evidence'][:12])
+                         row['technical_steps'][:12], row['evidence'][:12],
+                         str(row.get('title') or row['project'])[:180])
                 for row in read_shared_documents(MEMORY)]
     cli = str(Path(MEMORY["cli"]).expanduser())
     agent = MEMORY["agent"]

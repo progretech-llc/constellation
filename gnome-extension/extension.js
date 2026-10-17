@@ -6,7 +6,7 @@ import Meta from 'gi://Meta';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
-import {DEFAULT_SETTINGS, advancePhase, hitTest, layoutScene, renderGalaxy} from './galaxy.js';
+import {DEFAULT_SETTINGS, advancePhase, clickAction, hitTest, layoutScene, renderGalaxy} from './galaxy.js';
 
 const SCENE_PATH = GLib.build_filenamev([GLib.get_user_state_dir(), 'factory-observatory', 'scene.json']);
 const CONFIG_PATH = GLib.build_filenamev([GLib.get_user_config_dir(), 'factory-observatory', 'wallpaper.json']);
@@ -195,7 +195,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
         const node = this._hitNode(x, y);
         const ctrl = (modifiers & Clutter.ModifierType.CONTROL_MASK) !== 0;
         const alt = (modifiers & Clutter.ModifierType.MOD1_MASK) !== 0;
-        const actionable = node && (node.kind !== 'Remembered file' || ctrl || alt);
+        const actionable = node && (alt || clickAction(node, this._scene.memory_source, ctrl));
         if (this._clickTarget) {
             if (actionable) {
                 this._clickTarget.set_position(x - 12, y - 12);
@@ -206,12 +206,16 @@ export default class FactoryObservatoryWallpaper extends Extension {
             this._tooltip.hide();
             return;
         }
-        const path = node.kind === 'Remembered file' ? GLib.path_get_dirname(node.path) : node.path;
+        const action = clickAction(node, this._scene.memory_source, ctrl);
+        const path = action === 'hindsight' ? this._scene.memory_source.ui_url :
+            node.kind === 'Remembered file' ? GLib.path_get_dirname(node.path) : node.path;
         const displayedPath = path.length > 96 ? `…${path.slice(-95)}` : path;
         const memory = node.kind === 'Remembered file' && node.memory &&
             ['hindsight', 'hindsight-api'].includes(this._scene.memory_source?.provider);
         this._tooltip.text = `${node.name}  →  ${displayedPath}\n` +
-            (node.kind === 'Remembered file' ?
+            (action === 'hindsight' ? 'Click: review memories in Hindsight   ·   Alt+click: focus system' :
+                node.kind === 'Memory planet' ? 'Click: review this memory   ·   Alt+click: focus Hindsight' :
+                node.kind === 'Remembered file' ?
                 `Ctrl+click: open folder${memory ? '   ·   Ctrl+Shift+click: newest memory' : ''}` :
                 node.kind === 'Host' ? 'Click: open galaxy folder   ·   Alt+click: reset view' :
                 'Click: open folder   ·   Alt+click: focus system');
@@ -238,7 +242,9 @@ export default class FactoryObservatoryWallpaper extends Extension {
             if (!node && this._focus && this._desktopPoint(x, y)) {
                 this._focus = null;
             } else if (node) {
-                const target = node.kind === 'Remembered file' ?
+                const target = node.kind === 'Memory planet' ?
+                    this._scene.nodes.find(item => item.id === 'root:Hindsight') ?? node :
+                    node.kind === 'Remembered file' ?
                     this._scene.nodes.find(item => item.kind === 'Remembered directory' && item.path === GLib.path_get_dirname(node.path)) ?? node : node;
                 this._focus = this._focus?.path === target.path && this._focus?.root === target.root ?
                     null : {kind: target.kind, path: target.path, root: target.root, name: target.name};
@@ -247,14 +253,19 @@ export default class FactoryObservatoryWallpaper extends Extension {
             this._updateHover();
             return Clutter.EVENT_STOP;
         }
-        if (!node) return Clutter.EVENT_PROPAGATE;
-        if (node.kind === 'Remembered file') {
-            if (!ctrl) return Clutter.EVENT_PROPAGATE;
-            if (shift && node.memory && ['hindsight', 'hindsight-api'].includes(this._scene.memory_source?.provider))
-                this._openMemory(node);
-            else this._openFolder(GLib.path_get_dirname(node.path));
-        } else this._openFolder(node.path);
+        const action = clickAction(node, this._scene.memory_source, ctrl, shift);
+        if (!action) return Clutter.EVENT_PROPAGATE;
+        if (action === 'hindsight') this._openHindsight();
+        else if (action === 'memory') this._openMemory(node);
+        else this._openFolder(node.kind === 'Remembered file' ? GLib.path_get_dirname(node.path) : node.path);
         return Clutter.EVENT_STOP;
+    }
+
+    _openHindsight() {
+        Gio.AppInfo.launch_default_for_uri_async(this._scene.memory_source.ui_url, null, null, (_source, result) => {
+            try { Gio.AppInfo.launch_default_for_uri_finish(result); }
+            catch (error) { Main.notify('Constellation', `Could not open Hindsight: ${error.message}`); }
+        });
     }
 
     _openFolder(path) {

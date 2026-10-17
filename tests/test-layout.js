@@ -1,4 +1,29 @@
-import {advancePhase, hitTest, layoutScene} from '../gnome-extension/galaxy.js';
+import {advancePhase, clickAction, hitTest, layoutScene} from '../gnome-extension/galaxy.js';
+
+const memoryScene = {
+    memory_source: {provider: 'hindsight-api', ui_url: 'http://127.0.0.1:9999'},
+    nodes: [
+        {id: 'root:Hindsight', kind: 'Directory system', path: ''},
+        {id: 'memory:shared-id', kind: 'Memory planet', memory: 'shared-id', path: ''},
+        {id: 'agent:quiet', kind: 'Agent', path: ''},
+    ],
+};
+const memoryCoordinates = [[100, 100], [180, 100], [260, 100]];
+for (const [index, action] of [[0, 'hindsight'], [1, 'memory']]) {
+    const selected = hitTest(memoryScene, memoryCoordinates, new Set([0, 1, 2]), ...memoryCoordinates[index]);
+    if (selected !== memoryScene.nodes[index] || clickAction(selected, memoryScene.memory_source) !== action)
+        throw new Error('Pathless Hindsight nodes did not route to their web/memory actions');
+}
+if (hitTest(memoryScene, memoryCoordinates, new Set([0, 2]), 180, 100) !== null)
+    throw new Error('A hidden memory planet accepted a click');
+if (clickAction({kind: 'Agent', path: ''}, memoryScene.memory_source) !== null)
+    throw new Error('Quiet agents tried to open empty folders');
+const rememberedFile = {kind: 'Remembered file', path: '/project/file', memory: 'shared-id'};
+if (clickAction(rememberedFile, memoryScene.memory_source) !== null ||
+    clickAction(rememberedFile, memoryScene.memory_source, true) !== 'folder' ||
+    clickAction(rememberedFile, memoryScene.memory_source, true, true) !== 'memory')
+    throw new Error('File modifier navigation regressed');
+print('Hindsight root, memory planet and file navigation checks passed');
 
 const scene = {
     nodes: [

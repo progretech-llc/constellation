@@ -179,6 +179,8 @@ class ControlWindow(Gtk.ApplicationWindow):
         self._scale(content, "Light rays", "rays", 0, 1, 2)
         self._scale(content, "Galaxy star density", "density", 0, 1, 2)
         self.links_switch = self._switch(content, "Agent connection lines / orbiting lights", "links")
+        self.links_status = Gtk.Label(xalign=0, wrap=True)
+        content.append(self.links_status)
         self._update_light_controls()
         self._switch(content, "Directory and agent labels", "labels")
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
@@ -219,6 +221,16 @@ class ControlWindow(Gtk.ApplicationWindow):
         mode = self.values['agent_mode']
         self.write_switch.set_sensitive(mode != 'satellite')
         self.links_switch.set_sensitive(mode != 'asteroid' and not (mode == 'orbiting' and self.values['write_lights']))
+        if mode == 'asteroid':
+            self.links_status.set_text('Asteroid mode hides connection lines and bouncing lights. '
+                + ('One-way Write lights are enabled. ' if self.values['write_lights'] else '')
+                + 'For connections, choose Satellite or choose Orbiting with Write lights off.')
+        elif mode == 'orbiting' and self.values['write_lights']:
+            self.links_status.set_text('Write lights replace connection lines and bouncing lights. '
+                'Turn Write lights off above to enable this switch.')
+        self.links_status.set_visible(not self.links_switch.get_sensitive())
+        self.write_switch.set_tooltip_text('Write lights are available in Orbiting and Asteroid modes.'
+                                           if mode == 'satellite' else None)
 
     def _recommendations_page(self) -> Gtk.Widget:
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)

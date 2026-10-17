@@ -216,6 +216,32 @@ Teaching references:
         self.assertEqual(files[0].path, str(target))
         self.assertEqual(files[0].memory_ids, ['document-exact-id'])
 
+    def test_api_planets_need_no_file_paths_and_reuse_one_bounded_shared_read(self):
+        data = json.loads(self.config.read_text())
+        data['memory'] = {'provider': 'hindsight-api', 'api_url': 'http://127.0.0.1:8888',
+                          'bank_id': 'shared', 'ui_url': 'http://127.0.0.1:9999'}
+        self.config.write_text(json.dumps(data))
+        import config, memory_map, app, wallpaper_scene
+        importlib.reload(config)
+        importlib.reload(memory_map)
+        importlib.reload(app)
+        scene_module = importlib.reload(wallpaper_scene)
+        settings = self.base / 'wallpaper.json'
+        settings.write_text(json.dumps({'memory_planets': 2}))
+        records = [{'memory_id': f'shared-{n}', 'author': 'worker', 'project': 'Example',
+                    'title': f'Reviewed memory {n}', 'technical_steps': [], 'evidence': []}
+                   for n in range(4)]
+        with patch('hindsight_api.read_shared_documents', return_value=records) as read, \
+             patch.object(scene_module, 'SETTINGS_PATH', settings):
+            scene = scene_module.make_scene()
+        read.assert_called_once()
+        self.assertEqual(scene['counts']['files'], 0)
+        self.assertEqual(scene['counts']['memory_planets'], 2)
+        planets = [node for node in scene['nodes'] if node['kind'] == 'Memory planet']
+        self.assertEqual([node['memory'] for node in planets], ['shared-0', 'shared-1'])
+        self.assertEqual([node['name'] for node in planets], ['Reviewed memory 0', 'Reviewed memory 1'])
+        self.assertEqual(scene['memory_source']['ui_url'], data['memory']['ui_url'])
+
     def test_native_api_failure_does_not_replace_last_scene(self):
         self.map.MEMORY.update({'provider':'hindsight-api', 'api_url':'http://127.0.0.1:8888',
                                 'bank_id':'shared'})

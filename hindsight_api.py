@@ -13,8 +13,10 @@ MAX_DOCUMENTS = 100
 MAX_RESPONSE_BYTES = 2_000_000
 
 
-def validate_source(source: dict) -> None:
-    url = urlsplit(source.get('api_url', ''))
+def validate_web_url(value: str) -> None:
+    if not isinstance(value, str):
+        raise ValueError('Hindsight web addresses must be strings')
+    url = urlsplit(value)
     if url.scheme not in {'http', 'https'} or not url.hostname or url.username or url.password or url.query or url.fragment:
         raise ValueError('Hindsight API requires an HTTP(S) URL without credentials, query or fragment')
     try:
@@ -23,6 +25,12 @@ def validate_source(source: dict) -> None:
         loopback = url.hostname == 'localhost'
     if url.scheme == 'http' and not loopback:
         raise ValueError('Plain HTTP Hindsight API connections must use loopback')
+
+
+def validate_source(source: dict) -> None:
+    validate_web_url(source.get('api_url', ''))
+    if 'ui_url' in source:
+        validate_web_url(source['ui_url'])
     bank = source.get('bank_id')
     if not isinstance(bank, str) or not 1 <= len(bank) <= 512 or any(ord(c) < 32 for c in bank):
         raise ValueError('Configure one explicit Hindsight bank_id')
