@@ -38,6 +38,7 @@ def _display_agent(author: str) -> str:
 
 HEADER = re.compile(r"^([0-9a-f]{8}) \[([^/]+)/([^\]]+)\] (.+)$")
 PATH = re.compile(r"(?<![A-Za-z0-9:/])/(?:[^\s\"'<>|),;\]]+)")
+QUOTED_PATH = re.compile(r"([`\"'])(/[^\r\n]*?)\1")
 LINE_NUMBER = re.compile(r":\d+(?::\d+)?$")
 BLOCKED_SEGMENTS = {".ssh", ".config", ".local", ".git", "private-backup", "private", "credentials", "secrets"}
 BLOCKED_NAMES = {".env", "id_rsa", "id_ed25519", "hindsight.db"}
@@ -45,6 +46,7 @@ BLOCKED_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".sqlite", ".db", ".env"}
 SENSITIVE_SEGMENT = re.compile(r"(?:credential|secret|password|token|private.key)", re.I)
 WRITE = re.compile(r"\b(create(?:d)?|generat(?:ed|e)|wrote|added|saved|exported|produc(?:ed|e))\b", re.I)
 CHANGE = re.compile(r"\b(edit(?:ed)?|updat(?:ed|e)|modif(?:ied|y)|patch(?:ed)?|chang(?:ed|e)|revis(?:ed|e))\b", re.I)
+NEGATED_CLAUSE = re.compile(r"\b(?:no|not|never|without|didn't|wasn't|weren't|hasn't|haven't)\b[^.;\n]*", re.I)
 READ = re.compile(r"\b(read|opened|inspected|viewed|loaded|reviewed|checked|accessed|examined)\b", re.I)
 
 
@@ -178,6 +180,8 @@ def _read_json_activities() -> list[Activity]:
 
 
 def _classify(step: str) -> str:
+    # A denial of output creation is not evidence of a write.
+    step = NEGATED_CLAUSE.sub(" ", step)
     if CHANGE.search(step):
         return "modified"
     if WRITE.search(step):
@@ -217,14 +221,21 @@ def _safe_file(candidate: str) -> tuple[str, str, str] | None:
 
 
 def _paths(text: str) -> list[tuple[str, str, str]]:
-    # Structured evidence can be an exact path containing spaces.
-    exact = _safe_file(text)
-    if exact:
-        return [exact]
     found = []
-    for candidate in PATH.findall(text):
-        safe = _safe_file(candidate)
+    # A standalone evidence path or explicit quotation can contain spaces.
+    standalone = text.strip()
+    if standalone.startswith("/") and "\n" not in standalone:
+        safe = _safe_file(standalone)
         if safe:
+            return [safe]
+    for match in QUOTED_PATH.finditer(text):
+        safe = _safe_file(match.group(2))
+        if safe and safe not in found:
+            found.append(safe)
+    # Do not reinterpret a rejected quoted path as a shorter, unrelated file.
+    for candidate in PATH.findall(QUOTED_PATH.sub(" ", text)):
+        safe = _safe_file(candidate)
+        if safe and safe not in found:
             found.append(safe)
     return found
 

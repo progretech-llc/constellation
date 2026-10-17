@@ -82,6 +82,81 @@ class ConfiguredSourcesTests(unittest.TestCase):
         self.assertEqual(self.map._paths(f'Opened {outside}'), [])
         self.assertEqual(self.map._paths(f'Opened {secret}'), [])
 
+    def test_explicit_spaced_paths_and_plain_paths_are_preserved(self):
+        folder = self.root / 'Business Icons'
+        folder.mkdir()
+        document = folder / 'License Agreement.txt'
+        document.write_text('synthetic terms')
+        expected = [(str(document), str(folder), 'Projects')]
+        for text in (str(document), f'Read `{document}`.',
+                     f'Read "{document}".', f"Read '{document}'."):
+            with self.subTest(text=text):
+                self.assertEqual(self.map._paths(text), expected)
+        self.assertEqual(self.map._paths(f'Read {self.file}'),
+                         [(str(self.file), str(self.root), 'Projects')])
+        self.assertEqual(self.map._paths(f'Read {document}'), [])
+        self.assertEqual(self.map._paths('Read "relative file.txt"'), [])
+
+    def test_quoted_spaced_paths_keep_security_and_existence_guards(self):
+        outside = self.base / 'Outside document.txt'
+        outside.write_text('synthetic')
+        link = self.root / 'Linked document.txt'
+        link.symlink_to(outside)
+        blocked = self.root / 'private'
+        blocked.mkdir()
+        hidden = blocked / 'Private document.txt'
+        hidden.write_text('synthetic')
+        database = self.root / 'Example database.db'
+        database.write_text('synthetic')
+        for path in (outside, self.root / ".." / outside.name, link, hidden, database,
+                     self.root / 'Missing document.txt', self.root):
+            with self.subTest(path=path):
+                self.assertEqual(self.map._paths(f'Read `{path}`.'), [])
+        # Reject the entire quotation, even if its whitespace prefix exists.
+        self.assertEqual(self.map._paths(f'Read "{self.file} missing suffix"'), [])
+
+    def test_negated_output_does_not_turn_inspection_into_creation(self):
+        for step in (
+            f'Inspected "{self.file}" and catalog metadata. No visual asset was generated or redistributed.',
+            f'Read {self.file}; did not modify or create files.',
+            f'Opened {self.file} without changing it.',
+        ):
+            self.assertEqual(self.map._classify(step), 'accessed')
+        self.assertEqual(self.map._classify('No file was created.'), 'referenced')
+        self.assertEqual(self.map._classify('Never modified a file.'), 'referenced')
+        self.assertEqual(self.map._classify(f'Created {self.file}.'), 'created')
+        self.assertEqual(self.map._classify(f'Modified {self.file}.'), 'modified')
+
+    def test_cli_file_scene_keeps_original_author_and_display_mapping(self):
+        # Sanitized current Hindsight shape: real record ID/author, synthetic file.
+        output = f"""e5afd684 [project/active] Activity: Reviewed shared references
+  author: agent/codex
+  project: Example
+  provenance_type: structured-agent-activity
+Technical steps:
+- Inspected "{self.file}" and catalog metadata. No visual asset was generated or redistributed.
+Evidence:
+- {self.file}
+Teaching references:
+"""
+        self.map.MEMORY['project'] = 'Example'
+        activities = self.map._parse_cli_output(output)
+        self.assertEqual(activities[0].author, 'codex')
+        self.map.CONFIG['agent_aliases'] = {'codex': 'worker'}
+        import app
+        importlib.reload(app)
+        import wallpaper_scene
+        scene_module = importlib.reload(wallpaper_scene)
+        with patch.object(scene_module, 'read_activities', return_value=activities):
+            scene = scene_module.make_scene()
+        node = next(node for node in scene['nodes'] if node['kind'] == 'Remembered file')
+        self.assertEqual(node['memory'], 'e5afd684')
+        self.assertEqual(node['memory_author'], 'codex')
+        self.assertEqual(node['display_agent'], 'worker')
+        self.assertEqual(node['action'], 'accessed')
+        self.assertEqual(node['display_role'], '')  # reserved for shared-worker rendering
+        self.assertEqual(activities[0].author, 'codex')
+
     def test_only_reviewed_hindsight_activity_is_parsed(self):
         self.map.MEMORY['project'] = 'Example'
         output = '''a1b2c3d4 [project/active] Activity: example

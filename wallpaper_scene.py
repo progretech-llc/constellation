@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 from app import _build_scene, _project, ROOT_COLORS, AGENT_COLORS
-from memory_map import CONFIG, ROOTS, build_catalog, read_activities
+from memory_map import CONFIG, ROOTS, build_catalog, read_activities, _display_agent
 from hindsight_planets import read_recent, validate_directory
 from config import CONFIG_PATH
 from memory_discovery import PROVIDERS
@@ -159,6 +159,9 @@ def make_scene() -> dict:
     planet_authors = add_memory_planets(nodes, links, memory_root)
     visible_file_ids = set(nodes['id'])
     files = [item for item in files if 'file:' + item.path in visible_file_ids]
+    activity_authors = {(item.memory_id, item.project): item.author for item in activities}
+    file_authors = {"file:" + item.path: activity_authors.get(
+        (item.memory_ids[0], item.memory_projects[0]), "") for item in files if item.memory_ids}
     planet_ranks = {key: index + 1 for index, key in enumerate(planet_authors)}
     compact_nodes = [
         {
@@ -177,7 +180,8 @@ def make_scene() -> dict:
             "root": nodes["root"][index],
             "memory": nodes["memory"][index].split(", ")[0],
             "memory_project": nodes["memory_project"][index],
-            "memory_author": planet_authors.get(nodes["id"][index], ""),
+            "memory_author": planet_authors.get(nodes["id"][index], file_authors.get(nodes["id"][index], "")),
+            "display_agent": _display_agent(file_authors[nodes["id"][index]]) if nodes["id"][index] in file_authors else "",
             "memory_rank": planet_ranks.get(nodes["id"][index], 0),
         }
         for index in range(len(nodes["name"]))
