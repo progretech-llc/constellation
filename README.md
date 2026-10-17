@@ -89,6 +89,49 @@ To keep a current roster while showing older memories, configure display-only au
 
 Choose roots at the level you want to see as solar systems. For instance, `--host-name "MS-S1 Max" --galaxy "PT-CONTEXT=/mnt/pt-context" --root "Repositories=/mnt/pt-context/projects" --root "Deliverables=/mnt/pt-context/deliverables"` gives the host and the parent directory distinct labels, while its children orbit as systems. Subfolders orbit their nearest visible parent and remembered files orbit their containing folder when focused. Files named through a symlinked root still belong to that root as long as they resolve within it. On Wayland, changing extension JavaScript requires logout/login to load the new code; scene and configuration refreshes alone do not.
 
+### Vectorize Hindsight API
+
+The native API source reads one explicitly configured bank, without a database
+connection or a compatibility CLI:
+
+```bash
+python3 configure.py --hindsight-api http://127.0.0.1:8888 --bank-id progretech-shared-activity
+systemctl --user start factory-observatory-scene.service
+```
+
+For an authenticated server, add `--api-key-env HINDSIGHT_API_KEY` and make that
+environment variable available to the scene service and memory inspector. Keys
+are not stored in source configuration or the wallpaper scene. Plain HTTP is
+restricted to loopback; remote servers require HTTPS. Redirects are refused.
+
+Publish only reviewed activity summaries to this bank using Hindsight's normal
+retain API. Each source document must have **both** `constellation:shared` and
+`structured-agent-activity` tags. Its retained text must be a JSON object such as:
+
+```json
+{
+  "scope": "project",
+  "reviewed": true,
+  "provenance_type": "structured-agent-activity",
+  "author": "codex",
+  "project": "Example",
+  "title": "Reviewed report update",
+  "technical_steps": ["Updated the reviewed report"],
+  "evidence": ["/path/to/projects/report.md"]
+}
+```
+
+The source checks tags before fetching document content, then checks scope,
+review status and structure again. It does not enumerate banks or read private
+conversation banks. Only the most recent 100 matching documents are fetched,
+with response-size and timeout limits; retrieval failure preserves the previous
+scene. Existing root and sensitive-path filters still apply. Exact evidence paths
+may contain spaces. The memory inspector uses these same shared records.
+
+Update the GNOME extension with `./install-user.sh` after changing extension code.
+On Wayland, the new inspector controls load at the next logout/login; scene
+content continues to refresh through the existing timer.
+
 ## Inspect and extend
 
 The native app's **Open interactive map** button launches a Bokeh view bound to `127.0.0.1:8765`; hover to inspect remembered paths. Run `.venv/bin/python app.py --no-open` to save a local HTML snapshot. Run `gjs -m gnome-extension/render-preview.js ~/.local/state/factory-observatory/scene.json /tmp/constellation.png 1920 1080 assets/progre-foreground.png` to preview the exact Cairo composition. The GNOME background group is an internal Shell integration point and should be rechecked after Shell upgrades.

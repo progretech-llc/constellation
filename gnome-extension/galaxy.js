@@ -243,7 +243,7 @@ function attribution(cr, width, height, scene) {
         'CLICK FOLDER · OPEN     ALT+CLICK · FOCUS/RESET',
         'CTRL+HOVER FILE · TARGET     CTRL+CLICK · OPEN',
     ];
-    if (scene?.memory_source?.provider === 'hindsight')
+    if (['hindsight', 'hindsight-api'].includes(scene?.memory_source?.provider))
         shortcuts.push('CTRL+SHIFT+CLICK FILE · NEWEST MEMORY');
     const rows = [
         ...shortcuts.map(text => ({text, size: 8.5, bold: false, alpha: 0.82, gap: 0})),

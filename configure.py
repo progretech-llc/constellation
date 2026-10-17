@@ -16,6 +16,9 @@ def main() -> None:
     source = parser.add_mutually_exclusive_group()
     source.add_argument('--memory-dir', type=Path, help='Directory of reviewed JSON activity files')
     source.add_argument('--hindsight-cli', type=Path, help='Path to your authorized Hindsight CLI')
+    source.add_argument('--hindsight-api', help='Vectorize Hindsight API URL (HTTP is loopback-only)')
+    parser.add_argument('--bank-id', help='Explicit shared-activity bank for --hindsight-api')
+    parser.add_argument('--api-key-env', help='Optional API key environment variable name')
     parser.add_argument('--agent', help='Your own Hindsight identity (with --hindsight-cli)')
     parser.add_argument('--project', help='Hindsight project (with --hindsight-cli)')
     parser.add_argument('--root', action='append', metavar='LABEL=PATH', help='Solar system directory; repeat to replace all roots')
@@ -44,6 +47,13 @@ def main() -> None:
             parser.error(f'Hindsight CLI is not executable: {cli}')
         data['memory'] = {'provider': 'hindsight', 'cli': str(cli),
                           'agent': args.agent, 'project': args.project}
+    if args.hindsight_api:
+        if not args.bank_id:
+            parser.error('--hindsight-api requires --bank-id')
+        data['memory'] = {'provider': 'hindsight-api', 'api_url': args.hindsight_api,
+                          'bank_id': args.bank_id}
+        if args.api_key_env:
+            data['memory']['api_key_env'] = args.api_key_env
     if args.root:
         roots = []
         for value in args.root:

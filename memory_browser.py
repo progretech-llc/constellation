@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import html
+import json
 import secrets
 import subprocess
 import sys
 import time
 import webbrowser
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlencode, urlsplit
 
@@ -44,10 +46,18 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 ui-monospace,mono
 
 
 def serve(cli: str, agent: str, selected_id: str, *, open_browser: bool = True,
-          idle_seconds: float = 600) -> str:
-    if len(selected_id) != 8 or any(c not in '0123456789abcdef' for c in selected_id):
-        raise ValueError('Invalid memory planet ID')
-    records = read_recent(cli, agent, 5000)
+          idle_seconds: float = 600, api_config: Path | None = None) -> str:
+    if api_config is None:
+        if len(selected_id) != 8 or any(c not in '0123456789abcdef' for c in selected_id):
+            raise ValueError('Invalid memory planet ID')
+        records = read_recent(cli, agent, 5000)
+    else:
+        from config import load_config
+        from hindsight_api import read_shared_documents
+        records = [MemoryPlanet(row['memory_id'], str(row.get('title') or row['project']),
+                                row['author'], 'agent', row['project'], 'project',
+                                json.dumps(row, indent=2, ensure_ascii=False))
+                   for row in read_shared_documents(load_config(api_config)['memory'])]
     selected = [record for record in records if record.short_id == selected_id]
     if len(selected) != 1:
         raise LookupError('Memory is no longer available or its short ID is ambiguous')
@@ -98,6 +108,9 @@ if __name__ == '__main__':
     if len(sys.argv) != 4:
         raise SystemExit('Usage: memory_browser.py CLI AGENT MEMORY_ID')
     try:
-        serve(*sys.argv[1:])
+        if sys.argv[1] == '--api':
+            serve('', '', sys.argv[3], api_config=Path(sys.argv[2]))
+        else:
+            serve(*sys.argv[1:])
     except (OSError, ValueError, LookupError, subprocess.SubprocessError) as error:
         raise SystemExit(f'Constellation memory view unavailable: {error}') from error

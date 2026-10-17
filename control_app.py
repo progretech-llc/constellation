@@ -155,7 +155,7 @@ class ControlWindow(Gtk.ApplicationWindow):
             return
         result = subprocess.run([str(python), str(HERE / "wallpaper_scene.py")], capture_output=True, text=True, timeout=40, check=False)
         if result.returncode:
-            self.status.set_text("Memory refresh failed. The existing scene was retained; check the factory memory CLI.")
+            self.status.set_text("Memory refresh failed. The existing scene was retained; check the configured memory source.")
         else:
             self._refresh_status()
 

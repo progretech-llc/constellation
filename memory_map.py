@@ -113,6 +113,11 @@ def _parse_cli_output(output: str) -> list[Activity]:
 def read_activities() -> list[Activity]:
     if MEMORY["provider"] == "json":
         return _read_json_activities()
+    if MEMORY['provider'] == 'hindsight-api':
+        from hindsight_api import read_shared_documents
+        return [Activity(row['memory_id'], row['author'], row['project'],
+                         row['technical_steps'][:12], row['evidence'][:12])
+                for row in read_shared_documents(MEMORY)]
     cli = str(Path(MEMORY["cli"]).expanduser())
     agent = MEMORY["agent"]
     project = MEMORY["project"]
@@ -208,6 +213,10 @@ def _safe_file(candidate: str) -> tuple[str, str, str] | None:
 
 
 def _paths(text: str) -> list[tuple[str, str, str]]:
+    # Structured evidence can be an exact path containing spaces.
+    exact = _safe_file(text)
+    if exact:
+        return [exact]
     found = []
     for candidate in PATH.findall(text):
         safe = _safe_file(candidate)

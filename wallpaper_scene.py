@@ -14,6 +14,7 @@ from pathlib import Path
 from app import _build_scene, _project, ROOT_COLORS, AGENT_COLORS
 from memory_map import CONFIG, ROOTS, build_catalog, read_activities
 from hindsight_planets import read_recent, validate_directory
+from config import CONFIG_PATH
 
 
 STATE_HOME = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
@@ -110,6 +111,7 @@ def make_scene() -> dict:
             "cli": str(Path(CONFIG["memory"].get("cli", "")).expanduser()) if CONFIG["memory"].get("cli") else "",
             "agent": CONFIG["memory"].get("agent", ""),
             "browser_script": str(Path(__file__).with_name("memory_browser.py")),
+            "config_path": str(CONFIG_PATH),
         },
         "counts": {"activities": len(activities), "files": len(files), "directories": len({item.directory for item in files}), "agents": len(active_agents), "memory_planets": len(planet_authors)},
         "nodes": compact_nodes,

@@ -196,7 +196,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
         const path = node.kind === 'Remembered file' ? GLib.path_get_dirname(node.path) : node.path;
         const displayedPath = path.length > 96 ? `…${path.slice(-95)}` : path;
         const memory = node.kind === 'Remembered file' && node.memory &&
-            this._scene.memory_source?.provider === 'hindsight';
+            ['hindsight', 'hindsight-api'].includes(this._scene.memory_source?.provider);
         this._tooltip.text = `${node.name}  →  ${displayedPath}\n` +
             (node.kind === 'Remembered file' ?
                 `Ctrl+click: open folder${memory ? '   ·   Ctrl+Shift+click: newest memory' : ''}` :
@@ -237,7 +237,7 @@ export default class FactoryObservatoryWallpaper extends Extension {
         if (!node) return Clutter.EVENT_PROPAGATE;
         if (node.kind === 'Remembered file') {
             if (!ctrl) return Clutter.EVENT_PROPAGATE;
-            if (shift && node.memory && this._scene.memory_source?.provider === 'hindsight')
+            if (shift && node.memory && ['hindsight', 'hindsight-api'].includes(this._scene.memory_source?.provider))
                 this._openMemory(node);
             else this._openFolder(GLib.path_get_dirname(node.path));
         } else this._openFolder(node.path);
@@ -258,6 +258,15 @@ export default class FactoryObservatoryWallpaper extends Extension {
 
     _openMemory(node) {
         const source = this._scene.memory_source;
+        if (source?.provider === 'hindsight-api' && source.browser_script && source.config_path && node.memory) {
+            try {
+                Gio.Subprocess.new(['/usr/bin/python3', source.browser_script,
+                    '--api', source.config_path, node.memory], Gio.SubprocessFlags.NONE);
+            } catch (error) {
+                Main.notify('Constellation', `Could not open memory: ${error.message}`);
+            }
+            return;
+        }
         if (!source?.cli || !source.agent || !node.memory_project) return;
         try {
             Gio.Subprocess.new(['/usr/bin/python3', GLib.build_filenamev([this.path, 'memory_viewer.py']),

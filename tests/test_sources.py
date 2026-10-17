@@ -126,6 +126,33 @@ class ConfiguredSourcesTests(unittest.TestCase):
         files, _ = self.map.build_catalog(activities)
         self.assertEqual([item.path for item in files], [str(self.file)])
 
+    def test_native_api_activity_preserves_provenance_and_paths_with_spaces(self):
+        directory = self.root / 'Tools & Assets'
+        directory.mkdir()
+        target = directory / 'reviewed report.md'
+        target.write_text('reviewed')
+        self.map.MEMORY.update({'provider':'hindsight-api', 'api_url':'http://127.0.0.1:8888',
+                                'bank_id':'shared'})
+        row = {'memory_id':'document-exact-id', 'author':'worker', 'project':'Example',
+               'technical_steps':[], 'evidence':[str(target)]}
+        with patch('hindsight_api.read_shared_documents', return_value=[row]):
+            files, agents = self.map.build_catalog(self.map.read_activities())
+        self.assertEqual(agents, ['worker'])
+        self.assertEqual(files[0].path, str(target))
+        self.assertEqual(files[0].memory_ids, ['document-exact-id'])
+
+    def test_native_api_failure_does_not_replace_last_scene(self):
+        self.map.MEMORY.update({'provider':'hindsight-api', 'api_url':'http://127.0.0.1:8888',
+                                'bank_id':'shared'})
+        import wallpaper_scene
+        scene = importlib.reload(wallpaper_scene)
+        path = self.base / 'scene.json'
+        path.write_text('{"last":"valid scene"}')
+        with patch('hindsight_api.read_shared_documents', side_effect=OSError('offline')):
+            with self.assertRaises(OSError):
+                scene.write_scene(path)
+        self.assertEqual(json.loads(path.read_text()), {'last':'valid scene'})
+
     def test_retired_authors_can_share_one_display_node_without_rewriting_memory(self):
         self.map.CONFIG['agent_aliases'] = {'old-designer': 'worker'}
         self.map.CONFIG['unlisted_agent'] = 'worker'

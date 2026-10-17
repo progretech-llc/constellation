@@ -17,8 +17,11 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
     if memory.get('provider')=='mempalace':
         memory['provider']='hindsight'
         if str(memory.get('cli','')).endswith('/mempalace'):memory['cli']=str(memory['cli'])[:-9]+'hindsight'
-    if memory.get('provider') not in {'json', 'hindsight'}:
-        raise ValueError('memory.provider must be json or hindsight')
+    if memory.get('provider') not in {'json', 'hindsight', 'hindsight-api'}:
+        raise ValueError('memory.provider must be json, hindsight or hindsight-api')
+    if memory['provider'] == 'hindsight-api':
+        from hindsight_api import validate_source
+        validate_source(memory)
     if memory['provider'] == 'json' and not memory.get('directory'):
         raise ValueError('memory.directory is required for json provider')
     if memory['provider'] == 'hindsight' and not all(memory.get(key) for key in ('cli', 'agent', 'project')):
