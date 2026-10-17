@@ -1,5 +1,11 @@
 # Constellation by ProgreTech
 
+Version 12 combines the recovered appearance, folder, agent and memory controls
+with the native Hindsight API source. Asteroid and satellite modes, independent
+solar rotation, recorded-write lights and the 30 FPS renderer work with the
+configured activity backend. Agent and memory display choices preserve that
+backend. On Wayland, log out and back in after updating the extension.
+
 Constellation turns reviewed agent-memory activity into a rotating, luminous map on an Ubuntu GNOME wallpaper. Your workstation is the central star; agents orbit it, configured directory roots become solar systems, and files mentioned in memory become stars. Agent-to-file links keep their bouncing lights as the galaxy turns counterclockwise. Progre watches the sky from the bundled rooftop foreground. The lower-right **Constellation by ProgreTech · © 2026 ProgreTech LLC** attribution is rendered by the official wallpaper in both live and empty-data states.
 
 ![Constellation running on the ProgreTech workstation](assets/constellation-preview.png)
