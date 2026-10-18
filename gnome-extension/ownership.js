@@ -7,6 +7,16 @@ import {WallpaperOwnership} from './ownership-core.js';
 const KEY = Symbol.for('com.progretech.wallpaper-owner.v1');
 const PEERS = ['avalon@progretech.com', 'factory-observatory@progretech.com'];
 
+function restoreLegacyBackground() {
+    const settings = new Gio.Settings({schema_id: 'org.gnome.desktop.background'});
+    for (const key of ['picture-uri', 'picture-uri-dark']) {
+        let uri = settings.get_string(key);
+        try { uri = decodeURIComponent(uri); } catch { continue; }
+        if (uri.startsWith('file://') && uri.endsWith('/Constellation/data/progretech-constellation.png'))
+            settings.set_string(key, settings.get_default_value(key).deep_unpack());
+    }
+}
+
 function publish(uuid) {
     const directory = GLib.build_filenamev([GLib.get_user_runtime_dir(), 'progretech-wallpaper']);
     GLib.mkdir_with_parents(directory, 0o700);
@@ -18,6 +28,7 @@ function publish(uuid) {
 export function claimWallpaper(uuid, stop) {
     if (!PEERS.includes(uuid))
         throw new Error(`Unknown wallpaper: ${uuid}`);
+    restoreLegacyBackground();
     const registry = globalThis[KEY] ??= new WallpaperOwnership();
     const release = registry.claim(uuid, stop);
     try {
@@ -35,6 +46,7 @@ export function claimWallpaper(uuid, stop) {
     }
     return () => {
         release();
+        restoreLegacyBackground();
         publish(registry.owner?.uuid ?? null);
     };
 }

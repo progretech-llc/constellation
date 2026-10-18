@@ -16,6 +16,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gio, GLib, Gtk, Pango  # noqa: E402
 
 from config import CONFIG_PATH as SOURCES_PATH, load_config
+from wallpaper_background import restore_legacy_background
 from source_controls import editable_values, save_folder_controls
 from agent_controls import AgentPanel
 from memory_controls import MemoryPanel
@@ -538,6 +539,8 @@ class ControlWindow(Gtk.ApplicationWindow):
         self.values[key] = value
         save_settings(self.values)
         if key == 'enabled':
+            if not value:
+                restore_legacy_background()
             try:
                 subprocess.run(['gnome-extensions', 'enable' if value else 'disable',
                                 'factory-observatory@progretech.com'], check=True,
