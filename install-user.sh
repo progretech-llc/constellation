@@ -57,7 +57,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now factory-observatory-scene.timer
 systemctl --user start factory-observatory-scene.service
 
-gnome-extensions pack --force --out-dir "$repo_dir/build" --extra-source=galaxy.js --extra-source=memory_viewer.py "$repo_dir/gnome-extension" >/dev/null
+gnome-extensions pack --force --out-dir "$repo_dir/build" --extra-source=ownership.js --extra-source=ownership-core.js --extra-source=galaxy.js --extra-source=memory_viewer.py "$repo_dir/gnome-extension" >/dev/null
 extension_zip="$repo_dir/build/factory-observatory@progretech.com.shell-extension.zip"
 test -f "$extension_zip" || { echo 'GNOME extension bundle was not created' >&2; exit 1; }
 gnome-extensions install --force "$extension_zip"

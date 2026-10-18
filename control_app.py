@@ -199,6 +199,9 @@ class ControlWindow(Gtk.ApplicationWindow):
         buttons.append(inspect)
         content.append(buttons)
         self._loading = False
+        self._shell_settings = Gio.Settings.new('org.gnome.shell')
+        self._shell_settings.connect('changed', lambda *_args: self._sync_wallpaper_power())
+        self._sync_wallpaper_power()
 
     def _save_black_hole_name(self, _widget):
         name = black_hole_name(self.black_hole_entry.get_text())
@@ -520,11 +523,28 @@ class ControlWindow(Gtk.ApplicationWindow):
         row.append(scale)
         parent.append(row)
 
+    def _sync_wallpaper_power(self) -> None:
+        uuid = 'factory-observatory@progretech.com'
+        active = (uuid in self._shell_settings.get_strv('enabled-extensions')
+                  and uuid not in self._shell_settings.get_strv('disabled-extensions')
+                  and not self._shell_settings.get_boolean('disable-user-extensions'))
+        self._loading = True
+        self.power_switch.set_active(active and bool(self.values['enabled']))
+        self._loading = False
+
     def _set(self, key: str, value) -> None:
         if self._loading:
             return
         self.values[key] = value
         save_settings(self.values)
+        if key == 'enabled':
+            try:
+                subprocess.run(['gnome-extensions', 'enable' if value else 'disable',
+                                'factory-observatory@progretech.com'], check=True,
+                               capture_output=True, text=True, timeout=5)
+            except (OSError, subprocess.SubprocessError):
+                self.status.set_text('Could not switch the wallpaper. Check GNOME Extensions or log out and back in after installation.')
+                self._sync_wallpaper_power()
         if key == 'memory_planets':
             subprocess.Popen(['systemctl', '--user', 'start', 'factory-observatory-scene.service'],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

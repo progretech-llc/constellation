@@ -2,6 +2,8 @@
   "uuid": "factory-observatory@progretech.com",
   "name": "Constellation by ProgreTech",
   "description": "An animated GNOME memory galaxy for your agents and directory roots.",
-  "shell-version": ["50"],
-  "version": 13
+  "shell-version": [
+    "50"
+  ],
+  "version": 14
 }

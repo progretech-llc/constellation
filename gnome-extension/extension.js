@@ -6,6 +6,7 @@ import Meta from 'gi://Meta';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {claimWallpaper} from './ownership.js';
 import {DEFAULT_SETTINGS, advancePhase, clickAction, hitTest, layoutScene, renderGalaxy} from './galaxy.js';
 
 const SCENE_PATH = GLib.build_filenamev([GLib.get_user_state_dir(), 'factory-observatory', 'scene.json']);
@@ -21,6 +22,16 @@ function readJson(path) {
 
 export default class FactoryObservatoryWallpaper extends Extension {
     enable() {
+        this._release = claimWallpaper(this.uuid, () => this.disable());
+        try {
+            this._enableWallpaper();
+        } catch (error) {
+            this.disable();
+            throw error;
+        }
+    }
+
+    _enableWallpaper() {
         this._scene = null;
         this._foreground = null;
         this._settings = {...DEFAULT_SETTINGS};
@@ -30,6 +41,15 @@ export default class FactoryObservatoryWallpaper extends Extension {
         this._systemPhase = 0;
         this._focus = null;
         this._lastTick = GLib.get_monotonic_time();
+        // Enabling the extension is an explicit wallpaper-on request, including
+        // direct Shell enables after the control panel previously switched it off.
+        let settings;
+        try { settings = readJson(CONFIG_PATH); } catch (_error) { /* Keep the existing defaults fallback. */ }
+        if (settings?.enabled === false) {
+            settings.enabled = true;
+            Gio.File.new_for_path(CONFIG_PATH).replace_contents(JSON.stringify(settings),
+                null, false, Gio.FileCreateFlags.PRIVATE, null);
+        }
         this._reload();
         this._buildAreas();
         this._tooltip = new St.Label({visible: false, reactive: false,
@@ -85,6 +105,8 @@ export default class FactoryObservatoryWallpaper extends Extension {
         this._scene = null;
         this._foreground = null;
         this._focus = null;
+        this._release?.();
+        this._release = null;
     }
 
     _reload() {
