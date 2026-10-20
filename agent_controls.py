@@ -58,10 +58,13 @@ class AgentPanel(Gtk.Box):
                 scene = json.loads(self.scene_path.read_text())
             except (OSError, ValueError):
                 scene = {}
+            self.installed_roster = data.get('discover_agents', False)
             self.candidates = {item['id']: item for item in configured_candidates(data, scene)}
             self.default_ids = set(data['agents']) | set(scene.get('available_agents', [])) | {
                 node['id'].removeprefix('agent:') for node in scene.get('nodes', [])
                 if node.get('kind') == 'Agent' and node.get('id', '').startswith('agent:')}
+            if data.get('discover_agents'):
+                self.default_ids = set(data['agents'])
             self.expected = data.get('display_agents')
             self.automatic = self.expected is None
             self.selection = set(self.default_ids if self.automatic else self.expected)
@@ -124,7 +127,7 @@ class AgentPanel(Gtk.Box):
         self.selection = set(self.default_ids)
         self.automatic = True
         self._render()
-        self.status.set_text('Draft: automatic roster includes configured agents and new active memory authors. Apply to save.')
+        self.status.set_text('Draft: automatic roster follows installed agents; historical authors stay in memory. Apply to save.')
 
     def _scan(self, _button):
         self.scan.set_sensitive(False)
@@ -139,6 +142,10 @@ class AgentPanel(Gtk.Box):
                     if not proc.get_successful():
                         raise ValueError('Scan failed')
                     data = json.loads(output)
+                    if self.installed_roster:
+                        self.candidates = {}
+                        self.default_ids = {item['id'] for item in data['agents']}
+                        self.selection = self.default_ids if self.automatic else self.selection & self.default_ids
                     for item in data['agents']:
                         previous = self.candidates.get(item['id'])
                         if previous:

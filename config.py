@@ -72,6 +72,16 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
                 not isinstance(memory_node.get('path', ''), str) or
                 (memory_node.get('path') and not Path(memory_node['path']).is_absolute())):
             raise ValueError('memory_node must name one supported provider and an optional absolute path')
+    if type(data.get('discover_agents', False)) is not bool:
+        raise ValueError('discover_agents must be a boolean')
+    if data.get('discover_agents'):
+        from agent_discovery import discover
+        found = discover(data, include_history=False, probe_runtime=False)
+        data['agents'] = [item['id'] for item in found['agents']]
+        if data.get('display_agents') is not None:
+            data['display_agents'] = [agent for agent in data['display_agents'] if agent in data['agents']]
+        if data.get('unlisted_agent') not in data['agents']:
+            data['unlisted_agent'] = ''
     return data
 
 

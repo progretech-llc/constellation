@@ -84,6 +84,8 @@ def memory_bindings(data: dict) -> list[dict]:
 
 def configured_candidates(config: dict, scene: dict | None = None) -> list[dict]:
     agents = {}
+    if config.get('discover_agents'):
+        return [{'id': agent, 'name': agent.replace('-', ' ').title(), 'sources': ['Current installation']} for agent in config.get('agents', [])]
     for agent in [*config.get('agents', []), *(config.get('display_agents') or []),
                   *(scene or {}).get('available_agents', [])]:
         if valid_id(agent):
@@ -99,9 +101,11 @@ def configured_candidates(config: dict, scene: dict | None = None) -> list[dict]
 
 
 def discover(config: dict, *, home: Path | None = None, run=subprocess.run,
-             which=shutil.which, activity_reader=None) -> dict:
+             which=shutil.which, activity_reader=None, include_history=None, probe_runtime=True) -> dict:
     home = home or Path.home()
-    candidates = {item['id']: item for item in configured_candidates(config)}
+    if include_history is None:
+        include_history = not config.get('discover_agents', False)
+    candidates = {item['id']: item for item in configured_candidates(config)} if include_history else {}
     sources, warnings = [], []
 
     def add(agent, name, source):
@@ -115,6 +119,8 @@ def discover(config: dict, *, home: Path | None = None, run=subprocess.run,
     # List service metadata only. No environments, command lines, ports or tokens.
     services = {}
     try:
+        if not probe_runtime:
+            raise OSError()
         result = run(['systemctl', '--user', 'list-units', '--type=service', '--all', '--output=json', '--no-pager'],
                      capture_output=True, text=True, timeout=5, check=True)
         for unit in json.loads(result.stdout):
@@ -124,7 +130,7 @@ def discover(config: dict, *, home: Path | None = None, run=subprocess.run,
                 services[name] = state
                 sources.append({'name': name, 'kind': 'gateway service', 'status': state})
     except (OSError, ValueError, TypeError, subprocess.SubprocessError):
-        warnings.append('Local service status unavailable.')
+        if probe_runtime: warnings.append('Local service status unavailable.')
 
     # Desktop launches need not have the gateway CLI on PATH. Read roster
     # metadata only, never sessions, memory stores or credential fields.
@@ -133,6 +139,8 @@ def discover(config: dict, *, home: Path | None = None, run=subprocess.run,
         try:
             data = read_client_config(openclaw_config).get('agents', {})
             entries = data.get('entries', data.get('list', []))
+            if not entries and 'entries' not in data and 'list' not in data:
+                entries = [{'id': 'main', 'name': 'OpenClaw'}]
             if isinstance(entries, dict):
                 entries = [{**value, 'id': key} for key, value in list(entries.items())[:100]
                            if isinstance(value, dict)]
@@ -160,7 +168,7 @@ def discover(config: dict, *, home: Path | None = None, run=subprocess.run,
         except OSError:
             warnings.append('Hermes profile metadata unavailable.')
 
-    if which('openclaw'):
+    if probe_runtime and which('openclaw'):
         try:
             result = run(['openclaw', 'agents', 'list', '--json'], capture_output=True, text=True,
                          timeout=25, check=True)
@@ -184,6 +192,8 @@ def discover(config: dict, *, home: Path | None = None, run=subprocess.run,
 
     for name, executable, relative in CLIENTS:
         path = home / relative
+        if not include_history and not which(executable):
+            continue
         if not which(executable) and not path.is_file():
             continue
         bindings = []
@@ -196,6 +206,8 @@ def discover(config: dict, *, home: Path | None = None, run=subprocess.run,
             except (OSError, ValueError, TypeError, ImportError):
                 status = 'client found; identity configuration unavailable'
                 warnings.append(f'{name} identity metadata could not be read.')
+        if not include_history and path.is_file() and name in {'Codex', 'OpenCode', 'Claude Code'} and not bindings:
+            add(executable, name, f'{name} · configured client')
         if bindings:
             status = 'configured client; shared-memory identity found'
             for binding in bindings:
@@ -206,6 +218,8 @@ def discover(config: dict, *, home: Path | None = None, run=subprocess.run,
         sources.append({'name': name, 'kind': 'local client', 'status': status})
 
     try:
+        if not include_history:
+            return {'agents': sorted(candidates.values(), key=lambda item: item['id']), 'sources': sources, 'warnings': warnings}
         if activity_reader is None:
             from memory_map import read_activities
             activity_reader = read_activities

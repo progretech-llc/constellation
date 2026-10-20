@@ -215,7 +215,7 @@ def make_scene() -> dict:
         "nodes": compact_nodes,
         "links": compact_links,
         "agent_activity": agent_movement_metadata(files, nodes),
-        "available_agents": list(dict.fromkeys([*CONFIG.get('agents', []), *active_agents])),
+        "available_agents": [node['id'].removeprefix('agent:') for node in compact_nodes if node['kind'] == 'Agent'] if CONFIG.get('discover_agents') else list(dict.fromkeys([*CONFIG.get('agents', []), *active_agents])),
         "memory_node": CONFIG.get('memory_node') or {'provider': 'hindsight'
                           if memory_root or 'root:Hindsight' in nodes['id'] else None},
     }

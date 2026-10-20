@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import html
 import math
+from config import load_config
 import webbrowser
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -68,7 +69,10 @@ def _project(x: float, y: float, z: float, angle: float) -> tuple[float, float, 
 
 
 def _build_scene(files, active_agents):
-    author_order = list(dict.fromkeys([*ACTIVE_ROLES, *sorted(set(active_agents) - set(ACTIVE_ROLES))]))
+    active_roles = tuple(load_config()['agents']) if CONFIG.get('discover_agents') else ACTIVE_ROLES
+    author_order = list(dict.fromkeys([*active_roles, *sorted(set(active_agents) - set(active_roles))]))
+    if CONFIG.get('discover_agents'):
+        author_order = list(active_roles)
     if CONFIG.get('display_agents') is not None:
         author_order = list(CONFIG['display_agents'])
     nodes = {key: [] for key in ("id", "orbit_parent", "x", "y", "depth", "bx", "by", "bz", "size", "color", "alpha", "name", "kind", "detail", "action", "memory", "path", "root", "memory_project")}
@@ -143,7 +147,7 @@ def _build_scene(files, active_agents):
         theta = index * 2 * math.pi / max(1, len(author_order)) + 0.13
         xyz = (1.72 * math.cos(theta), 1.55 * math.sin(theta), (_hash01(agent) - 0.5) * 0.8)
         has_files = agent in active_agents
-        node("agent:" + agent, agent.title(), "Agent", "Reviewed file references: " + str(sum(agent in item.agents for item in files)), "", "", xyz, 11.5, _agent_color(agent), 0.96 if has_files else 0.42, label=agent in ACTIVE_ROLES or has_files, orbit_parent="host")
+        node("agent:" + agent, agent.title(), "Agent", "Reviewed file references: " + str(sum(agent in item.agents for item in files)), "", "", xyz, 11.5, _agent_color(agent), 0.96 if has_files else 0.42, label=agent in active_roles or has_files, orbit_parent="host")
 
     links = {key: [] for key in ("xs", "ys", "source_idx", "target_idx", "color", "alpha", "size")}
     for agent, file_path, action in recent_links(files, active_agents):
@@ -225,7 +229,7 @@ def _page_html(*, refresh_seconds: int | None = None) -> tuple[str, int, int, in
     title = Div(text="<span class='mark'>◉</span> &nbsp; CONSTELLATION BY PROGRETECH <span class='subtitle'> / SHARED MEMORY</span> <span class='right'>LOCAL · MEMORY SNAPSHOT</span>", height=28)
     scanned = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
     summary = Div(text=(f"{len(files)} remembered files &nbsp;·&nbsp; {len({item.directory for item in files})} directories &nbsp;·&nbsp; "
-                        f"{len(active_agents)} agents with file references &nbsp;·&nbsp; {len(activities)} reviewed activity records &nbsp;·&nbsp; refreshed {html.escape(scanned)}"),
+                        f"{len(authors)} visible agents &nbsp;·&nbsp; {len(activities)} reviewed activity records &nbsp;·&nbsp; refreshed {html.escape(scanned)}"),
                   height=20)
     legend = Div(text="<span class='created'>● created</span> &nbsp; <span class='modified'>● modified</span> &nbsp; <span class='accessed'>● accessed</span> &nbsp; <span class='referenced'>● referenced</span> &nbsp; · &nbsp; moving lights connect agents to remembered files; each agent's latest seven visible references are linked", height=24)
     controls = row(pause, angle, sizing_mode="stretch_width")

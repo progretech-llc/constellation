@@ -148,6 +148,36 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(scene['memory_source']['provider'],'json')
 
 
+    def test_installed_roster_excludes_saved_authors_and_tracks_profile_deletion(self):
+        home = self.base / 'native-home'
+        profile = home / '.hermes/profiles/imagen'
+        profile.mkdir(parents=True)
+        (profile / 'config.yaml').write_text('{}')
+        claw = home / '.openclaw/openclaw.json'
+        claw.parent.mkdir()
+        claw.write_text(json.dumps({'agents': {'defaults': {}}}))
+        cfg = {'agents': ['deleted'], 'display_agents': ['deleted'], 'discover_agents': True}
+        def probe():
+            return discover(cfg, home=home, which=lambda _: None, probe_runtime=False,
+                            activity_reader=lambda: [SimpleNamespace(author='deleted')])
+        self.assertEqual({x['id'] for x in probe()['agents']}, {'imagen', 'main'})
+        (profile / 'config.yaml').unlink()
+        self.assertEqual({x['id'] for x in probe()['agents']}, {'main'})
+        claw.write_text(json.dumps({'agents': {'list': []}}))
+        self.assertEqual(probe()['agents'], [])
+
+    def test_installed_scene_keeps_historical_files_without_resurrecting_agents(self):
+        from agent_discovery import configured_candidates
+        self.data['discover_agents'] = True
+        with patch('agent_discovery.discover', return_value={'agents': [{'id': 'imagen'}]}):
+            scene = self.scene()
+        self.assertEqual([n['id'] for n in scene['nodes'] if n['kind'] == 'Agent'], ['agent:imagen'])
+        self.assertEqual(scene['available_agents'], ['imagen'])
+        self.assertEqual(scene['counts']['files'], 1)
+        self.assertEqual(scene['links'], [])
+        self.assertEqual([x['id'] for x in configured_candidates({'discover_agents': True, 'agents': ['imagen'], 'display_agents': ['deleted']}, {'available_agents': ['deleted']})], ['imagen'])
+
+
 class DiscoveryTests(unittest.TestCase):
     def test_native_openclaw_and_hermes_rosters_without_gateway_cli(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -187,3 +187,7 @@ The GNOME extension shares a synchronous ownership guard with Project Avalon. En
 After updating extension code on Wayland, log out/in to load it. `gnome-extensions enable factory-observatory@progretech.com` returns ownership to Constellation. The shared `ownership-core.js` and `ownership.js` copies must stay identical to Avalon's files. Avalon carries the isolated-GNOME integration qualification; run native controls tests with `/usr/bin/python3 -m unittest discover -s tests/native -v`.
 
 The wallpaper off switch now also clears the known legacy static Constellation background URI to Ubuntu’s schema default. This migration touches only `*/Constellation/data/progretech-constellation.png`; unrelated user wallpapers remain unchanged. With Avalon selected, the shared guard performs the same migration. Updated extension JavaScript loads after the next logout/login.
+
+### Installed agent roster
+
+Set `discover_agents: true` in the user sources JSON to derive agent nodes from current local Hermes profiles, OpenClaw agents and configured installed Codex/Claude/OpenCode clients. Refreshes recheck native metadata; saved names and past memory authors cannot recreate a removed agent. Explicit display selections are intersected with that current roster. Discovery reports configured availability, not running work. Historical files and memory provenance remain intact. With this option disabled, standalone offline/custom memory datasets retain their explicitly configured roster behavior.
