@@ -72,6 +72,8 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
                 not isinstance(memory_node.get('path', ''), str) or
                 (memory_node.get('path') and not Path(memory_node['path']).is_absolute())):
             raise ValueError('memory_node must name one supported provider and an optional absolute path')
+    if type(data.get('native_harness', False)) is not bool:
+        raise ValueError('native_harness must be a boolean')
     if type(data.get('discover_agents', False)) is not bool:
         raise ValueError('discover_agents must be a boolean')
     if data.get('discover_agents'):

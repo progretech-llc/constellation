@@ -116,6 +116,14 @@ def discover(config: dict, *, home: Path | None = None, run=subprocess.run,
         if source not in item['sources']:
             item['sources'].append(source)
 
+    if config.get('native_harness'):
+        try:
+            from native_activity import read_sessions
+            for row in read_sessions(run=run):
+                add(row['author'], row['author'].title(), 'Native Harness · recorded owner')
+        except (OSError, ValueError, subprocess.SubprocessError):
+            warnings.append('Native Harness metadata unavailable; other sources were still checked.')
+
     # List service metadata only. No environments, command lines, ports or tokens.
     services = {}
     try:

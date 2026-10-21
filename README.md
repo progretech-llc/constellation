@@ -1,5 +1,11 @@
 # Constellation by ProgreTech
 
+Set `native_harness: true` in the source JSON to include native Harness session
+owners and their project folders. This reads bounded `harness ps` metadata,
+never conversations. Stopped/unknown sessions remain labeled as such; project
+context targets do not become write events. Reviewed file-change receipts still
+come from the configured shared memory source. Avalon reuses this collector.
+
 Version 13 combines the recovered appearance, folder, agent and memory controls
 with the native Hindsight API source. Asteroid and satellite modes, independent
 solar rotation, recorded-write lights and the 30 FPS renderer work with the

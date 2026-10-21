@@ -10,6 +10,7 @@
   "host_name": "My Workstation",
   "galaxy": {"label": "Home", "path": "~"},
   "agents": [],
+  "native_harness": false,
   "agent_aliases": {},
   "unlisted_agent": ""
 }

@@ -196,7 +196,7 @@ def make_scene() -> dict:
         {"from": links["source_idx"][index], "to": links["target_idx"][index], "color": links["color"][index]}
         for index in range(len(links["color"]))
     ]
-    return {
+    scene = {
         "schema": "factory-observatory-wallpaper/v1",
         "generated_at": int(time.time()),
         "source": "configured-reviewed-memory",
@@ -219,6 +219,14 @@ def make_scene() -> dict:
         "memory_node": CONFIG.get('memory_node') or {'provider': 'hindsight'
                           if memory_root or 'root:Hindsight' in nodes['id'] else None},
     }
+    if CONFIG.get('native_harness'):
+        from native_activity import read_sessions, visible_sessions, overlay
+        import subprocess
+        try:
+            overlay(scene, visible_sessions(CONFIG, read_sessions()))
+        except (OSError, ValueError, subprocess.SubprocessError):
+            scene['native_activity_error'] = 'Native Harness metadata unavailable'
+    return scene
 
 
 def write_scene(path: Path = SCENE_PATH) -> dict:
